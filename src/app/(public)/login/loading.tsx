@@ -1,0 +1,5 @@
+import { PublicAuthLoading } from "@/components/public/public-page-loading";
+
+export default function Loading() {
+  return <PublicAuthLoading label="กำลังเปิดหน้าเข้าสู่ระบบ..." />;
+}

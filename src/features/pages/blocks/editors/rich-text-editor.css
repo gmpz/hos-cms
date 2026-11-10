@@ -1,0 +1,93 @@
+.tiptap-editor.tiptap-simple-editor { overflow:visible; border:1px solid var(--border); border-radius:12px; background:#fff; }
+.tiptap-simple-editor .tiptap-toolbar { position:static; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px; padding:6px 10px; background:#fafafa; border-bottom:1px solid var(--border); border-radius:11px 11px 0 0; }
+.tiptap-simple-editor:focus-within .tiptap-toolbar { position:sticky; }
+.builder-canvas-wrap { --rich-text-sticky-offset:-25px; }
+.builder-block-preview.inline-rich-text .tiptap-simple-editor:focus-within .tiptap-toolbar { top:var(--rich-text-sticky-offset); }
+.tiptap-simple-editor .tiptap-toolbar button { width:34px; height:34px; color:#66717d; border-radius:6px; }
+.tiptap-simple-editor .tiptap-toolbar button.active { color:var(--primary); background:color-mix(in srgb,var(--primary) 10%,white); box-shadow:none; }
+.tiptap-simple-editor .tiptap-toolbar button:hover:not(:disabled) { background:#eaf0f2; box-shadow:none; }
+.tiptap-simple-editor .tiptap-toolbar button:focus-visible,.tiptap-simple-editor .tiptap-toolbar select:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.tiptap-simple-editor .tiptap-toolbar svg { width:18px; height:18px; }
+.tiptap-simple-editor .tiptap-toolbar>i { height:22px; flex:0 0 1px; margin:0 5px; }
+.tiptap-simple-editor .tiptap-tool-menu { position:relative; flex:0 0 auto; }
+.tiptap-simple-editor .tiptap-tool-menu>summary { display:flex; align-items:center; justify-content:center; gap:1px; width:42px; height:34px; border-radius:6px; color:#66717d; cursor:pointer; list-style:none; }
+.tiptap-simple-editor .tiptap-tool-menu.text-format-menu>summary { width:auto; min-width:128px; gap:7px; padding:0 9px; }
+.tiptap-simple-editor .tiptap-format-label { display:flex; align-items:center; min-height:34px; font-size:13px; line-height:1; white-space:nowrap; }
+.tiptap-simple-editor .tiptap-heading-option-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; font-size:11px; font-weight:600; }
+.tiptap-simple-editor .tiptap-tool-menu.no-chevron>summary { width:34px; }
+.tiptap-simple-editor .tiptap-tool-menu>summary::-webkit-details-marker { display:none; }
+.tiptap-simple-editor .tiptap-tool-menu>summary:hover,.tiptap-simple-editor .tiptap-tool-menu[open]>summary,.tiptap-simple-editor .tiptap-tool-menu>summary.active { background:#eaf0f2; color:var(--primary); }
+.tiptap-simple-editor .tiptap-tool-menu-chevron { width:11px!important; height:11px!important; }
+.tiptap-simple-editor .tiptap-tool-menu-popover { position:absolute; left:0; top:calc(100% + 7px); z-index:30; display:grid; min-width:185px; max-height:min(460px,calc(100dvh - 120px)); overflow-y:auto; padding:5px; border:1px solid var(--border); border-radius:9px; background:#fff; box-shadow:0 12px 30px #082e6324; }
+.tiptap-simple-editor .tiptap-tool-menu.align-right .tiptap-tool-menu-popover { right:0; left:auto; }
+.tiptap-simple-editor .tiptap-tool-menu-popover button { display:flex; align-items:center; justify-content:flex-start; gap:9px; width:100%; height:34px; padding:0 9px; font-size:12px; white-space:nowrap; }
+.tiptap-simple-editor .tiptap-tool-menu-popover button.active { background:color-mix(in srgb,var(--primary) 10%,white); color:var(--primary); }
+.tiptap-simple-editor .tiptap-highlight-palette { display:flex; align-items:center; gap:9px; padding:7px; }
+.tiptap-simple-editor .tiptap-tool-menu-popover .tiptap-highlight-palette>button { display:grid; place-items:center; width:28px; min-width:28px; height:28px; padding:0; border:2px solid color-mix(in srgb,var(--highlight-color,#fff) 70%,#8ca0aa); border-radius:50%; background:var(--highlight-color,#fff); }
+.tiptap-simple-editor .tiptap-highlight-palette>button:hover,.tiptap-simple-editor .tiptap-highlight-palette>button.selected { outline:2px solid var(--primary); outline-offset:2px; }
+.tiptap-simple-editor .tiptap-highlight-palette>i { width:1px; height:25px; background:var(--border); }
+.tiptap-simple-editor .tiptap-tool-menu-popover .tiptap-highlight-palette>.remove-highlight { border:0; color:#66717d; background:#fff; }
+.tiptap-simple-editor .tiptap-highlight-palette .remove-highlight svg { width:20px; height:20px; }
+.tiptap-simple-editor .tiptap-content,
+.news-editor .inline-rich-text .tiptap-simple-editor .tiptap-content { box-sizing:border-box; width:100%; max-width:800px; min-height:380px; margin:auto; padding:36px clamp(18px,4vw,56px) 64px; color:var(--foreground); font-size:16px; line-height:1.85; overflow-wrap:anywhere; }
+.tiptap-simple-editor.is-compact { box-sizing:border-box; width:100%; min-width:0; max-width:100%; overflow:hidden; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar { box-sizing:border-box; width:100%; min-width:0; max-width:100%; flex-wrap:nowrap; justify-content:flex-start; overflow-x:auto; overflow-y:hidden; padding:5px 7px; scrollbar-width:none; overscroll-behavior-x:contain; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar::-webkit-scrollbar { display:none; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar > :is(button,details,i) { flex:none; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar > button { width:32px; height:32px; }
+.tiptap-simple-editor.is-compact .tiptap-tool-menu > summary { height:32px; }
+.tiptap-simple-editor.is-compact .tiptap-tool-menu.text-format-menu > summary { min-width:116px; }
+.tiptap-simple-editor.is-compact .tiptap-content { box-sizing:border-box; width:100%; min-width:0; min-height:120px; max-height:220px; padding:14px; overflow-y:auto; font-size:14px; line-height:1.65; }
+.tiptap-simple-editor.is-compact .tiptap-content :is(h1,h2,h3,h4,h5,h6) { margin-top:1.25rem; margin-bottom:.65rem; }
+.news-editor .inline-rich-text .tiptap-simple-editor .tiptap-content,
+.builder-block-preview.inline-rich-text .tiptap-simple-editor .tiptap-content { min-height:320px; padding:14px 0 0; color:inherit; line-height:1.75; overflow-wrap:normal; }
+.builder-block-preview.inline-rich-text .tiptap-simple-editor .tiptap-content { max-width:none; margin-inline:0; }
+/* Public news card: 1002px border-box minus 40px padding and 1px border on each side = 920px. */
+.news-editor .inline-rich-text .content-block.width-narrow .tiptap-content { max-width:736px; }
+.news-editor .inline-rich-text .content-block.width-standard .tiptap-content { max-width:809.6px; }
+.news-editor .inline-rich-text .content-block.width-wide .tiptap-content { max-width:864.8px; }
+.news-editor .inline-rich-text .content-block.width-full .tiptap-content { max-width:920px; }
+.tiptap-simple-editor .tiptap-content :is(h1,h2,h3,h4,h5,h6) { margin-top:2.5rem; line-height:1.1; text-wrap:pretty; }
+.tiptap-simple-editor .tiptap-content :is(h1,h2) { margin-top:3.5rem; margin-bottom:1.5rem; }
+.tiptap-simple-editor .tiptap-content h1 { font-size:2em; font-weight:600; }
+.tiptap-simple-editor .tiptap-content h2 { font-size:1.55em; font-weight:600; }
+.tiptap-simple-editor .tiptap-content h3 { font-size:1.3em; font-weight:600; }
+.tiptap-simple-editor .tiptap-content h4 { font-size:1.15em; font-weight:600; }
+.tiptap-simple-editor .tiptap-content h5 { font-size:1em; font-weight:600; }
+.tiptap-simple-editor .tiptap-content h6 { font-size:.9em; font-weight:600; }
+.tiptap-simple-editor .tiptap-content p { margin:0 0 1em; }
+.tiptap-simple-editor .tiptap-content strong { font-weight:600; }
+.tiptap-simple-editor .tiptap-content :is(ul,ol) { margin:1.25rem 1rem 1.25rem .4rem; padding:0 1rem; }
+.tiptap-simple-editor .tiptap-content li p { margin-top:.25em; margin-bottom:.25em; }
+.tiptap-simple-editor .tiptap-content> :first-child { margin-top:0; }
+.tiptap-simple-editor .tiptap-content mark { padding:0; border-radius:.15rem; background:#faf594; box-decoration-break:clone; }
+.tiptap-simple-editor .tiptap-content img { display:block; width:auto; max-width:100%; max-height:760px; height:auto; margin:1.5rem auto; border-radius:10px; object-fit:contain; }
+.tiptap-simple-editor .tiptap-content img.ProseMirror-selectednode { outline:3px solid color-mix(in srgb,var(--primary) 70%,white); outline-offset:3px; }
+.tiptap-simple-editor .tiptap-content .tableWrapper { margin:1.5rem 0; overflow-x:auto; overflow-y:hidden; }
+.tiptap-simple-editor .tiptap-content > .tableWrapper:first-child,
+.tiptap-simple-editor .tiptap-content > .ProseMirror-gapcursor:first-child + .tableWrapper { margin-top:0; }
+.tiptap-simple-editor .tiptap-content table { width:100%; margin:0; border-collapse:collapse; table-layout:fixed; }
+.tiptap-simple-editor .tiptap-content :is(td,th) { position:relative; min-width:1em; padding:8px 10px; border:1px solid var(--border); box-sizing:border-box; vertical-align:top; }
+.tiptap-simple-editor .tiptap-content th { background:#f1f5f7; font-weight:600; text-align:left; }
+.tiptap-simple-editor .tiptap-content :is(td,th)>* { margin-bottom:0; }
+.tiptap-simple-editor .tiptap-content .selectedCell:after { position:absolute; inset:0; z-index:2; background:color-mix(in srgb,var(--primary) 12%,transparent); content:""; pointer-events:none; }
+.tiptap-simple-editor .tiptap-content .column-resize-handle { position:absolute; top:0; right:0; bottom:0; width:4px; background:var(--primary); pointer-events:none; }
+.tiptap-simple-editor .tiptap-content.resize-cursor { cursor:col-resize; }
+.tiptap-simple-editor .tiptap-content blockquote { margin:1.5rem 0; padding-left:1rem; border-left:3px solid var(--primary); color:var(--foreground); }
+.tiptap-simple-editor .tiptap-content hr { margin:2rem 0; border:0; border-top:1px solid #e9eef2; }
+@media(max-width:600px) {
+  .tiptap-simple-editor .tiptap-toolbar { gap:2px; padding:5px 7px; }
+  .tiptap-simple-editor .tiptap-content,
+  .news-editor .inline-rich-text .tiptap-simple-editor .tiptap-content { padding:24px 0 40px; min-height:300px; }
+}
+@media(max-width:900px) {
+  .tiptap-simple-editor .tiptap-toolbar { box-sizing:border-box; max-width:100%; flex-wrap:nowrap; justify-content:flex-start; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; }
+  .tiptap-simple-editor .tiptap-toolbar > :is(button,details,i) { flex:none; }
+  .tiptap-simple-editor .tiptap-toolbar > button { width:44px; height:44px; }
+  .tiptap-simple-editor .tiptap-tool-menu > summary { min-width:44px; min-height:44px; }
+  .tiptap-simple-editor .tiptap-tool-menu.text-format-menu > summary { min-width:128px; }
+  .tiptap-simple-editor .tiptap-tool-menu-popover { z-index:1000; }
+}
+@media(max-width:850px) {
+  .builder-canvas-wrap { --rich-text-sticky-offset:-12px; }
+}

@@ -1,0 +1,7 @@
+ALTER TABLE `cms_posts`
+  ADD COLUMN `cover_fit` VARCHAR(7) NOT NULL DEFAULT 'contain',
+  ADD COLUMN `cover_focus_x` TINYINT UNSIGNED NOT NULL DEFAULT 50,
+  ADD COLUMN `cover_focus_y` TINYINT UNSIGNED NOT NULL DEFAULT 50,
+  ADD COLUMN `published_cover_fit` VARCHAR(7) NOT NULL DEFAULT 'contain',
+  ADD COLUMN `published_cover_focus_x` TINYINT UNSIGNED NOT NULL DEFAULT 50,
+  ADD COLUMN `published_cover_focus_y` TINYINT UNSIGNED NOT NULL DEFAULT 50;

@@ -1,0 +1,4 @@
+ALTER TABLE `cms_announcements`
+  ADD COLUMN `splash_frequency` VARCHAR(32) NOT NULL DEFAULT 'ONCE_PER_CAMPAIGN',
+  ADD COLUMN `splash_interval_hours` SMALLINT UNSIGNED NOT NULL DEFAULT 24,
+  ADD COLUMN `splash_cookie_version` INT UNSIGNED NOT NULL DEFAULT 1;

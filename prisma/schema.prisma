@@ -1,0 +1,455 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PageAccessLevel {
+  PUBLIC
+  AUTHENTICATED
+  CUSTOM
+}
+
+enum ProfileMasterKind {
+  PERSON_TYPE
+  POSITION
+  LEVEL
+}
+
+enum CmsPageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CategoryScope {
+  POSTS
+  DOCUMENTS
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum DocumentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaKind {
+  IMAGE
+  DOCUMENT
+}
+
+enum UnitStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AnnouncementDisplayMode {
+  MODAL
+  SPLASH
+}
+
+enum AnnouncementContentMode {
+  TEXT
+  IMAGE
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Unit {
+  id                    String            @id @db.VarChar(100)
+  slug                  String            @unique @db.VarChar(191)
+  name                  String            @db.VarChar(160)
+  shortName             String            @map("short_name") @db.VarChar(160)
+  sortOrder             Int               @default(0) @map("sort_order") @db.UnsignedInt
+  status                UnitStatus        @default(DRAFT)
+  accessLevel           PageAccessLevel   @default(PUBLIC) @map("access_level")
+  payload               Json
+  draftAccessGrants     Json              @map("draft_access_grants")
+  publishedPayload      Json?             @map("published_payload")
+  publishedSlug         String?           @unique @map("published_slug") @db.VarChar(191)
+  publishedAccessLevel  PageAccessLevel?  @map("published_access_level")
+  publishedAt           DateTime?         @map("published_at")
+  hasUnpublishedChanges Boolean           @default(false) @map("has_unpublished_changes")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at")
+  posts                 Post[]
+  documents             Document[]
+  userMemberships       UserUnit[]
+  pageAccessGrants      PageAccessGrant[] @relation("PageGrantUnit")
+  landingAccessGrants   UnitAccessGrant[] @relation("UnitLandingResource")
+  grantedLandingAccess  UnitAccessGrant[] @relation("UnitLandingGrantee")
+
+  @@index([status, sortOrder, name])
+  @@map("cms_units")
+}
+
+model Category {
+  id        String        @id @db.Char(36)
+  scope     CategoryScope
+  name      String        @db.VarChar(160)
+  sortOrder Int           @default(0) @map("sort_order") @db.UnsignedInt
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @default(now()) @updatedAt @map("updated_at")
+  posts     Post[]
+  documents Document[]
+
+  @@unique([scope, name])
+  @@index([scope, sortOrder])
+  @@map("cms_categories")
+}
+
+model Post {
+  id                    String     @id @db.Char(36)
+  slug                  String     @unique @db.VarChar(191)
+  title                 String     @db.VarChar(300)
+  excerpt               String     @db.Text
+  categoryId            String     @map("category_id") @db.Char(36)
+  unitId                String     @default("hospital") @map("unit_id") @db.VarChar(100)
+  owner                 String     @db.VarChar(160)
+  status                PostStatus @default(DRAFT)
+  coverMediaId          String?    @map("cover_media_id") @db.VarChar(191)
+  coverFit              String     @default("contain") @map("cover_fit") @db.VarChar(7)
+  coverFocusX           Int        @default(50) @map("cover_focus_x") @db.UnsignedTinyInt
+  coverFocusY           Int        @default(50) @map("cover_focus_y") @db.UnsignedTinyInt
+  coverZoom             Int        @default(100) @map("cover_zoom") @db.UnsignedSmallInt
+  showCoverInContent    Boolean    @default(true) @map("show_cover_in_content")
+  blocks                Json
+  publishedSnapshot     Json?      @map("published_snapshot")
+  publishedTitle        String?    @map("published_title") @db.VarChar(300)
+  publishedExcerpt      String?    @map("published_excerpt") @db.Text
+  publishedCategoryId   String?    @map("published_category_id") @db.Char(36)
+  publishedUnitId       String?    @map("published_unit_id") @db.VarChar(100)
+  publishedOwner        String?    @map("published_owner") @db.VarChar(160)
+  publishedCoverMediaId String?    @map("published_cover_media_id") @db.VarChar(191)
+  publishedCoverFit     String     @default("contain") @map("published_cover_fit") @db.VarChar(7)
+  publishedCoverFocusX  Int        @default(50) @map("published_cover_focus_x") @db.UnsignedTinyInt
+  publishedCoverFocusY  Int        @default(50) @map("published_cover_focus_y") @db.UnsignedTinyInt
+  publishedCoverZoom    Int        @default(100) @map("published_cover_zoom") @db.UnsignedSmallInt
+  hasUnpublishedChanges Boolean    @default(false) @map("has_unpublished_changes")
+  viewCount             Int        @default(0) @map("view_count") @db.UnsignedInt
+  revision              Int        @default(1) @db.UnsignedInt
+  publishedAt           DateTime?  @map("published_at")
+  deletedAt             DateTime?  @map("deleted_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @default(now()) @updatedAt @map("updated_at")
+  category              Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  unit                  Unit       @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status])
+  @@index([unitId, status])
+  @@index([publishedCategoryId, status])
+  @@index([publishedUnitId, status])
+  @@index([deletedAt])
+  @@map("cms_posts")
+}
+
+model Document {
+  id             String         @id @db.Char(36)
+  title          String         @db.VarChar(300)
+  description    String         @db.Text
+  categoryId     String         @map("category_id") @db.Char(36)
+  unitId         String         @default("hospital") @map("unit_id") @db.VarChar(100)
+  owner          String         @db.VarChar(160)
+  fiscalYear     Int            @map("fiscal_year") @db.UnsignedInt
+  documentNumber String         @map("document_number") @db.VarChar(160)
+  issuedOn       DateTime?      @map("issued_on") @db.Date
+  mediaId        String?        @map("media_id") @db.VarChar(191)
+  openCount      Int            @default(0) @map("open_count") @db.UnsignedInt
+  downloadCount  Int            @default(0) @map("download_count") @db.UnsignedInt
+  status         DocumentStatus @default(DRAFT)
+  publishedAt    DateTime?      @map("published_at")
+  deletedAt      DateTime?      @map("deleted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at")
+  category       Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  unit           Unit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status])
+  @@index([unitId, status])
+  @@index([deletedAt])
+  @@index([deletedAt, fiscalYear])
+  @@index([status, deletedAt, fiscalYear])
+  @@map("cms_documents")
+}
+
+model SiteVisitSession {
+  id             String   @id @db.Char(36)
+  tokenHash      String   @unique @map("token_hash") @db.Char(64)
+  startedAt      DateTime @default(now()) @map("started_at")
+  lastActivityAt DateTime @map("last_activity_at")
+  landingPath    String   @map("landing_path") @db.VarChar(300)
+  source         String   @db.VarChar(20)
+  device         String   @db.VarChar(20)
+
+  @@index([startedAt])
+  @@index([lastActivityAt])
+  @@map("cms_site_visit_sessions")
+}
+
+model SiteVisitDaily {
+  day    DateTime @id @db.Date
+  visits Int      @default(0) @db.UnsignedInt
+
+  @@map("cms_site_visit_daily")
+}
+
+model MediaAsset {
+  id            String         @id @db.VarChar(191)
+  name          String         @db.VarChar(255)
+  kind          MediaKind
+  mimeType      String         @map("mime_type") @db.VarChar(191)
+  sizeBytes     Int            @map("size_bytes") @db.UnsignedInt
+  alt           String         @db.VarChar(500)
+  fileName      String         @unique @map("file_name") @db.VarChar(191)
+  uploadedAt    DateTime       @default(now()) @map("uploaded_at")
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at")
+  profileUsers  User[]
+  siteLogos     SiteSettings[]
+  announcements Announcement[]
+
+  @@index([kind, uploadedAt])
+  @@index([uploadedAt, id])
+  @@map("cms_media_assets")
+}
+
+model Announcement {
+  id               String                  @id @db.Char(36)
+  title            String                  @db.VarChar(200)
+  description      String                  @db.Text
+  displayMode      AnnouncementDisplayMode @map("display_mode")
+  splashSlot       Int?                    @unique @map("splash_slot") @db.UnsignedTinyInt
+  contentMode      AnnouncementContentMode @map("content_mode")
+  imageMediaId     String?                 @map("image_media_id") @db.VarChar(191)
+  imageAlt         String                  @default("") @map("image_alt") @db.VarChar(500)
+  buttonLabel      String                  @default("") @map("button_label") @db.VarChar(80)
+  buttonUrl        String                  @default("") @map("button_url") @db.VarChar(2048)
+  openInNewTab     Boolean                 @default(false) @map("open_in_new_tab")
+  allowSuppression Boolean                 @default(true) @map("allow_suppression")
+  repeatAfterDays  Int                     @default(30) @map("repeat_after_days") @db.UnsignedSmallInt
+  modalFrequency   String                  @default("ONCE_PER_CAMPAIGN") @map("modal_frequency") @db.VarChar(32)
+  modalIntervalHours Int                   @default(24) @map("modal_interval_hours") @db.UnsignedSmallInt
+  splashFrequency  String                  @default("ONCE_PER_CAMPAIGN") @map("splash_frequency") @db.VarChar(32)
+  splashIntervalHours Int                  @default(24) @map("splash_interval_hours") @db.UnsignedSmallInt
+  splashCookieVersion Int                  @default(1) @map("splash_cookie_version") @db.UnsignedInt
+  modalCookieVersion Int                   @default(1) @map("modal_cookie_version") @db.UnsignedInt
+  publishedSnapshot Json?                   @map("published_snapshot")
+  hasUnpublishedChanges Boolean            @default(false) @map("has_unpublished_changes")
+  startsAt         DateTime?               @map("starts_at")
+  endsAt           DateTime?               @map("ends_at")
+  priority         Int                     @default(0) @db.UnsignedInt
+  status           AnnouncementStatus      @default(DRAFT)
+  revision         Int                     @default(1) @db.UnsignedInt
+  publishedAt      DateTime?               @map("published_at")
+  deletedAt        DateTime?               @map("deleted_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @default(now()) @updatedAt @map("updated_at")
+  imageMedia       MediaAsset?             @relation(fields: [imageMediaId], references: [id], onDelete: SetNull)
+
+  @@index([status, displayMode, startsAt, endsAt])
+  @@index([deletedAt])
+  @@index([imageMediaId])
+  @@map("cms_announcements")
+}
+
+model SiteSettings {
+  id          Int         @id @default(1)
+  name        String      @db.VarChar(160)
+  englishName String      @map("english_name") @db.VarChar(160)
+  logoMediaId String?     @map("logo_media_id") @db.VarChar(191)
+  logoFocusX  Int         @default(50) @map("logo_focus_x") @db.UnsignedTinyInt
+  logoFocusY  Int         @default(50) @map("logo_focus_y") @db.UnsignedTinyInt
+  logoZoom    Int         @default(100) @map("logo_zoom") @db.UnsignedSmallInt
+  homepageId  String?     @map("homepage_id") @db.VarChar(100)
+  address     String      @db.Text
+  mapUrl      String      @default("") @map("map_url") @db.VarChar(2048)
+  facebookUrl String      @default("") @map("facebook_url") @db.VarChar(2048)
+  youtubeUrl  String      @default("") @map("youtube_url") @db.VarChar(2048)
+  lineUrl     String      @default("") @map("line_url") @db.VarChar(2048)
+  phone       String      @db.VarChar(40)
+  email       String      @db.VarChar(254)
+  theme       Json
+  revision    Int         @default(1) @db.UnsignedInt
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at")
+  logoMedia   MediaAsset? @relation(fields: [logoMediaId], references: [id], onDelete: SetNull)
+
+  @@index([logoMediaId])
+  @@map("cms_site_settings")
+}
+
+model User {
+  id                  String            @id @db.Char(36)
+  username            String            @unique @db.VarChar(80)
+  displayName         String            @map("display_name") @db.VarChar(160)
+  passwordHash        String            @map("password_hash") @db.VarChar(255)
+  role                UserRole          @default(MEMBER)
+  status              UserStatus        @default(ACTIVE)
+  mustChangePassword  Boolean           @default(true) @map("must_change_password")
+  failedLoginAttempts Int               @default(0) @map("failed_login_attempts") @db.UnsignedInt
+  lockedUntil         DateTime?         @map("locked_until")
+  lastLoginAt         DateTime?         @map("last_login_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at")
+  personTypeId        String?           @map("person_type_id") @db.Char(36)
+  positionId          String?           @map("position_id") @db.Char(36)
+  levelId             String?           @map("level_id") @db.Char(36)
+  profileMediaId      String?           @map("profile_media_id") @db.VarChar(191)
+  profilePhotoFocusX  Int               @default(50) @map("profile_photo_focus_x") @db.UnsignedTinyInt
+  profilePhotoFocusY  Int               @default(25) @map("profile_photo_focus_y") @db.UnsignedTinyInt
+  profilePhotoZoom    Int               @default(100) @map("profile_photo_zoom") @db.UnsignedSmallInt
+  phone               String            @default("") @db.VarChar(40)
+  phoneExtension      String            @default("") @map("phone_extension") @db.VarChar(6)
+  email               String            @default("") @db.VarChar(254)
+  publishPhone        Boolean           @default(false) @map("publish_phone")
+  publishEmail        Boolean           @default(false) @map("publish_email")
+  personType          ProfileMaster?    @relation("UserPersonType", fields: [personTypeId], references: [id], onDelete: SetNull)
+  position            ProfileMaster?    @relation("UserPosition", fields: [positionId], references: [id], onDelete: SetNull)
+  level               ProfileMaster?    @relation("UserLevel", fields: [levelId], references: [id], onDelete: SetNull)
+  profileMedia        MediaAsset?       @relation(fields: [profileMediaId], references: [id], onDelete: SetNull)
+  memberships         UserUnit[]
+  pageAccessGrants    PageAccessGrant[]
+  unitAccessGrants    UnitAccessGrant[]
+  sessions            Session[]
+  auditEvents         AuditLog[]        @relation("AuditActor")
+
+  @@map("cms_users")
+}
+
+model ProfileMaster {
+  id              String            @id @db.Char(36)
+  kind            ProfileMasterKind
+  name            String            @db.VarChar(160)
+  active          Boolean           @default(true)
+  sortOrder       Int               @default(0) @map("sort_order") @db.UnsignedInt
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at")
+  personTypeUsers User[]            @relation("UserPersonType")
+  positionUsers   User[]            @relation("UserPosition")
+  levelUsers      User[]            @relation("UserLevel")
+
+  @@unique([kind, name])
+  @@index([kind, sortOrder])
+  @@map("cms_profile_masters")
+}
+
+model UserUnit {
+  userId    String  @map("user_id") @db.Char(36)
+  unitId    String  @map("unit_id") @db.VarChar(100)
+  isPrimary Boolean @default(false) @map("is_primary")
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit      Unit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@id([userId, unitId])
+  @@index([unitId, userId])
+  @@map("cms_user_units")
+}
+
+model AuditLog {
+  id         String   @id @db.Char(36)
+  actorId    String?  @map("actor_id") @db.Char(36)
+  action     String   @db.VarChar(80)
+  entityType String   @map("entity_type") @db.VarChar(80)
+  entityId   String   @map("entity_id") @db.VarChar(191)
+  summary    String   @db.VarChar(500)
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt])
+  @@index([actorId])
+  @@map("cms_audit_logs")
+}
+
+model Session {
+  id         String   @id @db.Char(36)
+  userId     String   @map("user_id") @db.Char(36)
+  tokenHash  String   @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("cms_sessions")
+}
+
+model CmsPage {
+  id              String            @id @db.VarChar(100)
+  path            String            @unique @db.VarChar(500)
+  name            String            @db.VarChar(300)
+  status          CmsPageStatus     @default(DRAFT)
+  accessLevel     PageAccessLevel   @default(PUBLIC) @map("access_level")
+  draftBlocks     Json              @map("draft_blocks")
+  publishedBlocks Json?             @map("published_blocks")
+  draftHeader     Json?             @map("draft_header")
+  publishedHeader Json?             @map("published_header")
+  revision        Int               @default(1) @db.UnsignedInt
+  publishedAt     DateTime?         @map("published_at")
+  deletedAt       DateTime?         @map("deleted_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at")
+  accessGrants    PageAccessGrant[]
+
+  @@index([status, updatedAt])
+  @@index([deletedAt])
+  @@map("cms_pages")
+}
+
+model PageAccessGrant {
+  id     String  @id @db.Char(36)
+  pageId String  @map("page_id") @db.VarChar(100)
+  unitId String? @map("unit_id") @db.VarChar(100)
+  userId String? @map("user_id") @db.Char(36)
+  page   CmsPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  unit   Unit?   @relation("PageGrantUnit", fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([pageId, unitId])
+  @@unique([pageId, userId])
+  @@map("cms_page_access_grants")
+}
+
+model UnitAccessGrant {
+  id             String  @id @db.Char(36)
+  resourceUnitId String  @map("resource_unit_id") @db.VarChar(100)
+  unitId         String? @map("unit_id") @db.VarChar(100)
+  userId         String? @map("user_id") @db.Char(36)
+  resourceUnit   Unit    @relation("UnitLandingResource", fields: [resourceUnitId], references: [id], onDelete: Cascade)
+  unit           Unit?   @relation("UnitLandingGrantee", fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user           User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([resourceUnitId, unitId])
+  @@unique([resourceUnitId, userId])
+  @@map("cms_unit_access_grants")
+}
+
+model NavigationConfig {
+  id        Int      @id @default(1)
+  document  Json
+  revision  Int      @default(1) @db.UnsignedInt
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("cms_navigation")
+}
