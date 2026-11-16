@@ -1,6 +1,9 @@
 import { PagesManager } from "@/features/pages/components/pages-manager";
-import { listCmsPages } from "@/server/pages/repository";
+import { listCmsPages, listDeletedCmsPages } from "@/server/pages/repository";
 
 export const instant = false;
 
-export default async function PagesPage() { return <PagesManager initialPages={await listCmsPages()}/>; }
+export default async function PagesPage() {
+  const [initialPages, initialDeletedPages] = await Promise.all([listCmsPages(), listDeletedCmsPages()]);
+  return <PagesManager initialPages={initialPages} initialDeletedPages={initialDeletedPages}/>;
+}

@@ -30,12 +30,9 @@ function PublicLink({
   const href = resolveTarget(item.target);
   const pathname = usePathname();
   const active = isPathActive(pathname, href);
-  const displayIcon = icon ?? (!child && item.target.kind === "module"
-    ? item.target.module === "news" ? "newspaper" : item.target.module === "documents" ? "file-text" : undefined
-    : undefined);
   const content = (
     <>
-      <span aria-hidden="true">{displayIcon ? <NavigationIcon name={displayIcon} /> : child ? "›" : "○"}</span>
+      {icon ? <span aria-hidden="true"><NavigationIcon name={icon} /></span> : null}
       <b>{item.label}</b>
     </>
   );
@@ -85,7 +82,7 @@ function PublicNavigationGroup({
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary>
-        <span aria-hidden="true">{item.icon ? <NavigationIcon name={item.icon} /> : "▦"}</span>
+        {item.icon ? <span aria-hidden="true"><NavigationIcon name={item.icon} /></span> : null}
         <b>{item.label}</b>
         <i aria-hidden="true"><ChevronDown size={16} /></i>
       </summary>

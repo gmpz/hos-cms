@@ -2,21 +2,16 @@
 
 import { CalendarDays } from "lucide-react";
 import Link from "next/link";
-import {
-  getDemoMediaItem,
-} from "@/features/media/demo/media-registry";
 import type { DemoPost } from "@/features/pages/demo/data";
 import { NewsCoverImage } from "./news-cover-image";
-import { useMediaRevision } from "@/features/media/use-media-revision";
 
 export function PublicNewsCard({ post }: { post: DemoPost }) {
-  const hydrated = useMediaRevision();
-  const cover = hydrated ? getDemoMediaItem(post.coverMediaId) : undefined;
+  const coverUrl = post.coverImageUrl;
   return (
     <article className="public-news-index-card">
       <Link href={`/news/${post.slug}`} className="public-related-news-card-link" aria-label={`อ่านข่าว ${post.title}`}>
-        <span className={`public-related-news-cover public-news-index-cover news-cover-viewport ${cover ? "" : "fallback-logo"}`} style={cover ? undefined : { backgroundImage: "url(/hospital-logo.png)" }} role="img" aria-label={cover?.alt ?? "ตราสัญลักษณ์โรงพยาบาล"}>
-          {cover ? <NewsCoverImage post={post} media={cover} /> : null}
+        <span className={`public-related-news-cover public-news-index-cover news-cover-viewport ${coverUrl ? "" : "fallback-logo"}`} style={coverUrl ? undefined : { backgroundImage: "url(/hospital-logo.png)" }} role="img" aria-label={coverUrl ? post.title : "ตราสัญลักษณ์โรงพยาบาล"}>
+          {coverUrl ? <NewsCoverImage post={post} src={coverUrl} /> : null}
         </span>
         {post.isNew ? <span className="news-new-badge">ใหม่</span> : null}
         <div>

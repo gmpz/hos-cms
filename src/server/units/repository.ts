@@ -40,6 +40,7 @@ function toDto(row: Unit, published = false): DemoUnit {
     hasUnpublishedChanges: published ? false : row.hasUnpublishedChanges,
     publishedSlug: row.publishedSlug,
     publishedAt: row.publishedAt?.toISOString() ?? null,
+    deletedAt: row.deletedAt?.toISOString() ?? null,
   } as DemoUnit;
 }
 
@@ -77,11 +78,12 @@ async function hydratePersonnelProfiles(units: DemoUnit[], includePrivate: boole
   }) }));
 }
 
-export async function listUnits(includeDrafts: boolean, user: AuthUser | null = null): Promise<DemoUnit[]> {
+export async function listUnits(includeDrafts: boolean, user: AuthUser | null = null, includeDeleted = false): Promise<DemoUnit[]> {
   const unrestricted = includeDrafts || user?.role === "ADMIN";
   const rows = await prisma.unit.findMany({
     where: {
       id: { not: "hospital" },
+      deletedAt: includeDrafts && includeDeleted ? { not: null } : null,
       ...(includeDrafts ? {} : { status: UnitStatus.PUBLISHED, publishedSlug: { not: null }, publishedPayload: { not: Prisma.DbNull } }),
       ...(unrestricted ? {} : { OR: [
         { publishedAccessLevel: PageAccessLevel.PUBLIC },
@@ -94,7 +96,7 @@ export async function listUnits(includeDrafts: boolean, user: AuthUser | null = 
         ] : []),
       ] }),
     },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    orderBy: includeDrafts && includeDeleted ? [{ deletedAt: "desc" }, { name: "asc" }] : [{ sortOrder: "asc" }, { name: "asc" }],
   });
   const units = await hydrateCoverImages(await hydratePersonnelProfiles(rows.map((row) => toDto(row, !includeDrafts)), includeDrafts));
   return units;
@@ -104,7 +106,7 @@ export async function reorderUnits(ids: string[]): Promise<void> {
   if (!ids.length || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id)) || new Set(ids).size !== ids.length)
     throw new UnitInputError("ลำดับหน่วยงานไม่ถูกต้อง");
   await prisma.$transaction(async (tx) => {
-    const current = await tx.unit.findMany({ where: { id: { not: "hospital" } }, select: { id: true, updatedAt: true } });
+    const current = await tx.unit.findMany({ where: { id: { not: "hospital" }, deletedAt: null }, select: { id: true, updatedAt: true } });
     if (current.length !== ids.length || current.some((unit) => !ids.includes(unit.id)))
       throw new UnitInputError("รายการหน่วยงานเปลี่ยนไป กรุณาโหลดหน้าใหม่", 409);
     const byId = new Map(current.map((unit) => [unit.id, unit]));
@@ -113,8 +115,8 @@ export async function reorderUnits(ids: string[]): Promise<void> {
 }
 
 export async function getUnitAccessBySlug(slug: string): Promise<PageAccessLevel | null> {
-  const unit = await prisma.unit.findUnique({ where: { publishedSlug: slug }, select: { status: true, publishedAccessLevel: true } });
-  return unit?.status === UnitStatus.PUBLISHED ? unit.publishedAccessLevel : null;
+  const unit = await prisma.unit.findUnique({ where: { publishedSlug: slug }, select: { status: true, publishedAccessLevel: true, deletedAt: true } });
+  return unit?.status === UnitStatus.PUBLISHED && !unit.deletedAt ? unit.publishedAccessLevel : null;
 }
 
 export async function getPublishedUnitSnapshot(id: string): Promise<DemoUnit | null> {
@@ -123,7 +125,7 @@ export async function getPublishedUnitSnapshot(id: string): Promise<DemoUnit | n
     where: { id },
     include: { landingAccessGrants: { select: { unitId: true, userId: true } } },
   });
-  if (!row?.publishedPayload || !row.publishedSlug) return null;
+  if (!row?.publishedPayload || !row.publishedSlug || row.deletedAt) return null;
   const snapshot = toDto(row, true);
   snapshot.status = "published";
   snapshot.accessGrants = {
@@ -136,7 +138,7 @@ export async function getPublishedUnitSnapshot(id: string): Promise<DemoUnit | n
 export async function unpublishUnit(id: string): Promise<DemoUnit> {
   if (!/^[0-9a-f-]{36}$/i.test(id) || id === "hospital") throw new UnitInputError("รหัสกลุ่มงานไม่ถูกต้อง");
   const result = await prisma.unit.updateMany({
-    where: { id, status: UnitStatus.PUBLISHED },
+    where: { id, status: UnitStatus.PUBLISHED, deletedAt: null },
     data: { status: UnitStatus.DRAFT, hasUnpublishedChanges: false },
   });
   if (!result.count) throw new UnitInputError("ไม่พบกลุ่มงานที่เผยแพร่", 404);
@@ -150,15 +152,50 @@ export async function deleteUnit(id: string): Promise<void> {
     where: { id },
     select: {
       name: true,
+      deletedAt: true,
       _count: { select: { posts: true, documents: true, pageAccessGrants: true, grantedLandingAccess: true } },
     },
   });
   if (!unit) throw new UnitInputError("ไม่พบกลุ่มงาน", 404);
+  if (unit.deletedAt) throw new UnitInputError("กลุ่มงานอยู่ในถังขยะแล้ว", 409);
   if (unit._count.posts || unit._count.documents)
     throw new UnitInputError(`ลบ “${unit.name}” ไม่ได้ เนื่องจากยังมีข่าวหรือเอกสารอยู่ กรุณาย้ายเนื้อหาก่อน`, 409);
   if (unit._count.pageAccessGrants || unit._count.grantedLandingAccess)
     throw new UnitInputError(`ลบ “${unit.name}” ไม่ได้ เนื่องจากยังถูกใช้กำหนดสิทธิ์การเข้าถึง`, 409);
-  await prisma.unit.delete({ where: { id } });
+  await prisma.unit.update({ where: { id }, data: { deletedAt: new Date(), status: UnitStatus.DRAFT, hasUnpublishedChanges: false } });
+}
+
+export async function restoreUnit(id: string): Promise<void> {
+  if (!/^[0-9a-f-]{36}$/i.test(id) || id === "hospital") throw new UnitInputError("รหัสกลุ่มงานไม่ถูกต้อง");
+  await prisma.$transaction(async (tx) => {
+    const last = await tx.unit.aggregate({ where: { id: { not: "hospital" }, deletedAt: null }, _max: { sortOrder: true } });
+    const result = await tx.unit.updateMany({
+      where: { id, deletedAt: { not: null } },
+      data: { deletedAt: null, status: UnitStatus.DRAFT, hasUnpublishedChanges: false, sortOrder: (last._max.sortOrder ?? -1) + 1 },
+    });
+    if (!result.count) throw new UnitInputError("ไม่พบกลุ่มงานในถังขยะ", 404);
+  });
+}
+
+export async function purgeUnit(id: string): Promise<void> {
+  if (!/^[0-9a-f-]{36}$/i.test(id) || id === "hospital") throw new UnitInputError("รหัสกลุ่มงานไม่ถูกต้อง");
+  await prisma.$transaction(async (tx) => {
+    const unit = await tx.unit.findUnique({
+      where: { id },
+      select: {
+        name: true,
+        deletedAt: true,
+        _count: { select: { posts: true, documents: true, pageAccessGrants: true, grantedLandingAccess: true } },
+      },
+    });
+    if (!unit?.deletedAt) throw new UnitInputError("ไม่พบกลุ่มงานในถังขยะ", 404);
+    if (unit._count.posts || unit._count.documents)
+      throw new UnitInputError(`ลบ “${unit.name}” ถาวรไม่ได้ เนื่องจากยังมีข่าวหรือเอกสารอยู่`, 409);
+    if (unit._count.pageAccessGrants || unit._count.grantedLandingAccess)
+      throw new UnitInputError(`ลบ “${unit.name}” ถาวรไม่ได้ เนื่องจากยังถูกใช้กำหนดสิทธิ์การเข้าถึง`, 409);
+    const result = await tx.unit.deleteMany({ where: { id, deletedAt: { not: null } } });
+    if (!result.count) throw new UnitInputError("กลุ่มงานเปลี่ยนแปลงไป กรุณาโหลดหน้าใหม่", 409);
+  });
 }
 
 export async function discardUnitDraft(id: string): Promise<DemoUnit> {
@@ -168,7 +205,7 @@ export async function discardUnitDraft(id: string): Promise<DemoUnit> {
       where: { id },
       include: { landingAccessGrants: { select: { unitId: true, userId: true } } },
     });
-    if (!current || current.id === "hospital" || current.status !== UnitStatus.PUBLISHED || !current.publishedPayload || !current.publishedSlug || !current.publishedAccessLevel || !current.hasUnpublishedChanges)
+    if (!current || current.id === "hospital" || current.deletedAt || current.status !== UnitStatus.PUBLISHED || !current.publishedPayload || !current.publishedSlug || !current.publishedAccessLevel || !current.hasUnpublishedChanges)
       throw new UnitInputError("ไม่พบฉบับร่างที่รอยกเลิก", 404);
     const published = current.publishedPayload as Partial<DemoUnit>;
     const grants = {
@@ -254,8 +291,9 @@ export async function saveUnit(input: unknown, publish: boolean): Promise<DemoUn
   const payload = JSON.stringify(storedValue);
   if (payload.length > 500_000) throw new UnitInputError("ข้อมูลกลุ่มงานมีขนาดใหญ่เกินไป");
   const row = await prisma.$transaction(async (tx) => {
-    const existing = await tx.unit.findUnique({ where: { id }, select: { status: true, publishedPayload: true, publishedSlug: true, publishedAccessLevel: true, sortOrder: true, landingAccessGrants: { select: { unitId: true, userId: true } } } });
-    const nextSortOrder = existing?.sortOrder ?? ((await tx.unit.aggregate({ where: { id: { not: "hospital" } }, _max: { sortOrder: true } }))._max.sortOrder ?? -1) + 1;
+    const existing = await tx.unit.findUnique({ where: { id }, select: { status: true, deletedAt: true, publishedPayload: true, publishedSlug: true, publishedAccessLevel: true, sortOrder: true, landingAccessGrants: { select: { unitId: true, userId: true } } } });
+    if (existing?.deletedAt) throw new UnitInputError("กลุ่มงานอยู่ในถังขยะ กรุณากู้คืนก่อนแก้ไข", 409);
+    const nextSortOrder = existing?.sortOrder ?? ((await tx.unit.aggregate({ where: { id: { not: "hospital" }, deletedAt: null }, _max: { sortOrder: true } }))._max.sortOrder ?? -1) + 1;
     const liveUnitIds = existing?.landingAccessGrants.flatMap((grant) => grant.unitId ? [grant.unitId] : []) ?? [];
     const liveUserIds = existing?.landingAccessGrants.flatMap((grant) => grant.userId ? [grant.userId] : []) ?? [];
     const hasUnpublishedChanges = !publish && existing?.status === UnitStatus.PUBLISHED && (

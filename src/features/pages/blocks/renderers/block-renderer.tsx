@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { BlockConfigMap, PageBlock } from "../config/types";
+import type { PublicDocumentBlockPage } from "@/features/documents/demo/storage";
+import type { DemoPost } from "@/features/pages/demo/data";
 import { normalizeBlockPosition } from "../config/layout";
 import { BannerSlider, SingleBanner } from "./banner-slider";
 import { RichText } from "./rich-text";
@@ -11,15 +13,15 @@ import {
   PostsContentBlock,
 } from "./dynamic-content-blocks";
 import { Gallery } from "./gallery";
+import { ResponsivePdfEmbed } from "./responsive-pdf-embed";
 import { LinkCards } from "./link-cards";
 import { TabbedNewsBlock } from "./tabbed-news-block";
 import { MediaInteractionOverlay } from "./media-interaction-overlay";
 import {
-  getDemoMediaItem,
-  hydrateDemoMedia,
   mediaPreviewStyle,
   subscribeDemoMedia,
 } from "@/features/media/demo/media-registry";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import { DocumentFileIcon } from "@/features/media/components/document-file-icon";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
 import { useLinkTargetResolver } from "@/features/navigation/link-target-catalog-context";
@@ -29,6 +31,7 @@ import { readUnits } from "@/features/units/demo/storage";
 import { formatPhoneWithExtension } from "@/features/users/phone";
 import {
   ArrowRight,
+  ChevronDown,
   Clock3,
   Contact,
   Download,
@@ -55,12 +58,16 @@ export function BlockRenderer({
   pdfPositionOnly = false,
   loadingDelayMs = 0,
   loadingPresentation = "skeleton",
+  initialDocumentPages,
+  initialNewsTabPosts,
 }: {
   blocks: PageBlock[];
   adminPreview?: boolean;
   pdfPositionOnly?: boolean;
   loadingDelayMs?: number;
   loadingPresentation?: "skeleton" | "level-two";
+  initialDocumentPages?: Record<string, PublicDocumentBlockPage>;
+  initialNewsTabPosts?: Record<string, DemoPost[]>;
 }) {
   const [, setMediaRevision] = useState(0);
   const [mediaReady, setMediaReady] = useState(false);
@@ -75,7 +82,6 @@ export function BlockRenderer({
   useEffect(() => {
     let active = true;
     let delayTimer: number | undefined;
-    let mediaFallbackTimer: number | undefined;
     const refresh = () => {
       if (active) setMediaRevision((revision) => revision + 1);
     };
@@ -83,31 +89,18 @@ export function BlockRenderer({
     const delay = loadingDelayMs > 0
       ? new Promise<void>((resolve) => { delayTimer = window.setTimeout(resolve, loadingDelayMs); })
       : Promise.resolve();
-    // Media metadata improves block previews, but a failed or stalled media
-    // request must never keep the whole public page behind its loading state.
-    const mediaHydration = hydrateDemoMedia().catch(() => undefined);
-    const mediaReadyOrTimedOut = Promise.race([
-      mediaHydration,
-      new Promise<void>((resolve) => {
-        mediaFallbackTimer = window.setTimeout(resolve, 4_000);
-      }),
-    ]);
-    void Promise.all([mediaReadyOrTimedOut, delay]).then(() => {
+    void delay.then(() => {
       refresh();
       if (active) setMediaReady(true);
     });
     return () => {
       active = false;
       if (delayTimer !== undefined) window.clearTimeout(delayTimer);
-      if (mediaFallbackTimer !== undefined) window.clearTimeout(mediaFallbackTimer);
       unsubscribe();
     };
   }, [loadingDelayMs]);
 
-  // Public Page Builder routes already have the shared level-two loading
-  // boundary in app/(public)/loading.tsx. Once the page payload has arrived,
-  // render its blocks immediately and let media metadata hydrate in the
-  // background instead of showing a second full-page loader.
+  // The route payload already includes the media URL needed by each block.
   if (!mediaReady && loadingPresentation === "skeleton") {
     return <BlockSkeletonRenderer blocks={blocks} />;
   }
@@ -170,7 +163,7 @@ export function BlockRenderer({
             {b.type === "image" && (
               b.config.mode === "imageText" ? (
                 <div className={`image-text image-${b.config.imagePosition} align-${b.config.verticalAlign} split-${b.config.imageTextSplit}`}>
-                  <MediaFigure title="" description="" titleAlign="left" mediaId={b.config.mediaId} alt={b.config.alt || b.config.title} aspectRatio={b.config.aspectRatio} fit={b.config.imageTextDisplay === "crop" ? "cover" : b.config.fit} focalPoint={b.config.focalPoint} zoom={b.config.zoom} interaction={b.config.imageInteraction} interactionDisabled={adminPreview} naturalImage={b.config.imageTextDisplay === "natural"} />
+                  <MediaFigure title="" description="" titleAlign="left" mediaId={b.config.mediaId} mediaSource={b.config} alt={b.config.alt || b.config.title} aspectRatio={b.config.aspectRatio} fit={b.config.imageTextDisplay === "crop" ? "cover" : b.config.fit} focalPoint={b.config.focalPoint} zoom={b.config.zoom} interaction={b.config.imageInteraction} interactionDisabled={adminPreview} naturalImage={b.config.imageTextDisplay === "natural"} />
                   <div>
                     <h2>{b.config.title}</h2>
                     <SecondaryRichText value={b.config.description} />
@@ -183,13 +176,13 @@ export function BlockRenderer({
                 </div>
               ) : (
                 <div className="image-block-frame">
-                  <MediaFigure title={b.config.title} description={b.config.description} titleAlign={b.headingAlign} mediaId={b.config.mediaId} alt={b.config.alt} aspectRatio={b.config.aspectRatio} fit={b.config.fit} focalPoint={b.config.focalPoint} zoom={b.config.zoom} interaction={b.config.imageInteraction} interactionDisabled={adminPreview} imageSize={b.config.imageSize} imageAlign={b.config.imageAlign} />
+                  <MediaFigure title={b.config.title} description={b.config.description} titleAlign={b.headingAlign} mediaId={b.config.mediaId} mediaSource={b.config} alt={b.config.alt} aspectRatio={b.config.aspectRatio} fit={b.config.fit} focalPoint={b.config.focalPoint} zoom={b.config.zoom} interaction={b.config.imageInteraction} interactionDisabled={adminPreview} imageSize={b.config.imageSize} imageAlign={b.config.imageAlign} />
                 </div>
               )
             )}
             {b.type === "imageText" && (
               <div className={`image-text image-${b.config.imagePosition} align-${b.config.verticalAlign}`}>
-                <MediaVisual mediaId={b.config.imageId} alt={b.config.title} />
+                <MediaVisual mediaId={b.config.imageId} mediaSource={b.config} alt={b.config.title} />
                 <div>
                   <h2>{b.config.title}</h2>
                   <SecondaryRichText value={b.config.body} />
@@ -226,10 +219,21 @@ export function BlockRenderer({
             {b.type === "gallery" && <Gallery config={b.config} />}
             {b.type === "faq" && (
               <div className="faq-list">
+                {b.config.title || b.config.description ? (
+                  <header className="structured-block-heading faq-heading">
+                    {b.config.title ? <h2>{b.config.title}</h2> : null}
+                    {b.config.description ? <p>{b.config.description}</p> : null}
+                  </header>
+                ) : null}
                 {b.config.items.map((item, index) => (
                   <details key={`${item.question}-${index}`}>
-                    <summary>{item.question}</summary>
-                    <SecondaryRichText value={item.answer} />
+                    <summary>
+                      <span className="faq-question">{item.question}</span>
+                      <ChevronDown className="faq-toggle" size={20} aria-hidden="true" />
+                    </summary>
+                    <div className="faq-answer">
+                      <SecondaryRichText value={item.answer} />
+                    </div>
                   </details>
                 ))}
               </div>
@@ -331,7 +335,7 @@ export function BlockRenderer({
                 <div className="public-document-list article-attachment-list">
                 {b.config.files.length ? (
                   b.config.files.map((file) => {
-                    const media = getDemoMediaItem(file.mediaId);
+                    const media = displayMediaFor(file);
                     const content = (
                       <>
                         <DocumentFileIcon file={media} size={19} />
@@ -388,9 +392,9 @@ export function BlockRenderer({
               />
             )}
             {b.type === "posts" && <PostsContentBlock config={b.config} />}
-            {b.type === "newsTabs" && <TabbedNewsBlock config={b.config} />}
+            {b.type === "newsTabs" && <TabbedNewsBlock config={b.config} initialPosts={initialNewsTabPosts?.[b.id]} />}
             {b.type === "documents" && (
-              <DocumentsContentBlock config={b.config} />
+              <DocumentsContentBlock config={b.config} initialPage={initialDocumentPages?.[b.id]} />
             )}
           </section>
         ))}
@@ -506,7 +510,7 @@ function BlockSkeleton({ block }: { block: PageBlock }) {
     case "gallery":
       return <><SkeletonHeading /><div className={`block-skeleton-gallery columns-${block.config.columns}`}>{Array.from({ length: Math.min(6, Math.max(1, block.config.images.length)) }, (_, index) => <span className="public-loading-shape" key={index} />)}</div></>;
     case "faq":
-      return <SkeletonRows count={block.config.items.length} />;
+      return <>{block.config.title || block.config.description ? <SkeletonHeading /> : null}<SkeletonRows count={block.config.items.length} /></>;
     case "table":
       return <><SkeletonHeading /><div className="block-skeleton-table"><SkeletonRows count={block.config.rows.length + 1} /></div></>;
     case "statistics":
@@ -576,7 +580,7 @@ function BlockHeading({ title, description }: { title: string; description: stri
 function PersonnelBlock({ config }: { config: BlockConfigMap["personnel"] }) {
   const units = readUnits().filter((unit) => unit.status === "published" && (!config.unitId || unit.id === config.unitId));
   const people = units.flatMap((unit) => unit.personnel.map((person) => ({ ...person, unitName: unit.shortName || unit.name }))).slice(0, config.limit);
-  return <div className="personnel-block"><BlockHeading title={config.title} description={config.description}/><div className={`personnel-block-grid columns-${config.columns}`}>{people.map((person) => <article key={`${person.unitName}-${person.id}`}><div className="personnel-block-photo" style={person.mediaId ? { ...mediaPreviewStyle(getDemoMediaItem(person.mediaId)), backgroundPosition: `${person.photoFocus.x}% ${person.photoFocus.y}%`, backgroundSize: `${person.photoFocus.zoom ?? 100}% auto` } : undefined}>{!person.mediaId ? <Users size={32}/> : null}</div><div><h3>{person.name}</h3><p>{person.position}</p>{person.expertise ? <small>{person.expertise}</small> : null}<span>{person.unitName}</span></div></article>)}</div>{!people.length ? <p className="structured-block-empty">ยังไม่มีข้อมูลบุคลากร</p> : null}</div>;
+  return <div className="personnel-block"><BlockHeading title={config.title} description={config.description}/><div className={`personnel-block-grid columns-${config.columns}`}>{people.map((person) => <article key={`${person.unitName}-${person.id}`}><div className="personnel-block-photo" style={person.mediaId ? { ...mediaPreviewStyle(displayMediaFor(person)), backgroundPosition: `${person.photoFocus.x}% ${person.photoFocus.y}%`, backgroundSize: `${person.photoFocus.zoom ?? 100}% auto` } : undefined}>{!person.mediaId ? <Users size={32}/> : null}</div><div><h3>{person.name}</h3><p>{person.position}</p>{person.expertise ? <small>{person.expertise}</small> : null}<span>{person.unitName}</span></div></article>)}</div>{!people.length ? <p className="structured-block-empty">ยังไม่มีข้อมูลบุคลากร</p> : null}</div>;
 }
 
 function ProcessStepsBlock({ config }: { config: BlockConfigMap["processSteps"] }) {
@@ -652,7 +656,7 @@ function DocumentListBlock({
                   : "";
             const media =
               item.source?.kind === "media"
-                ? getDemoMediaItem(item.source.mediaId)
+                ? displayMediaFor(item.source)
                 : null;
             const rowClassName = `level-${item.level} ${number ? "has-number" : "no-number"} no-icon`;
             const content = (
@@ -723,13 +727,14 @@ function safeExternalUrl(value: string) {
 }
 
 function MediaVisual({
-  mediaId,
+  mediaSource,
   alt,
 }: {
   mediaId: string | null;
+  mediaSource: unknown;
   alt: string;
 }) {
-  const media = getDemoMediaItem(mediaId);
+  const media = displayMediaFor(mediaSource, "imageId");
   return (
     <div
       className={`block-media ${media ? "has-media" : ""}`}
@@ -745,7 +750,7 @@ function MediaFigure({
   title,
   description,
   titleAlign,
-  mediaId,
+  mediaSource,
   alt,
   aspectRatio,
   fit,
@@ -761,6 +766,7 @@ function MediaFigure({
   description: string;
   titleAlign: "left" | "center" | "right";
   mediaId: string | null;
+  mediaSource: unknown;
   alt: string;
   aspectRatio: import("../config/types").BlockConfigMap["image"]["aspectRatio"];
   fit: import("../config/types").BlockConfigMap["image"]["fit"];
@@ -772,7 +778,7 @@ function MediaFigure({
   imageAlign?: import("../config/types").BlockConfigMap["image"]["imageAlign"];
   naturalImage?: boolean;
 }) {
-  const media = getDemoMediaItem(mediaId);
+  const media = displayMediaFor(mediaSource);
   const preserveNaturalRatio = Boolean(imageSize) || naturalImage;
   const dimensions = media?.dimensions.match(/(\d+)\s*[×x]\s*(\d+)/i);
   const originalRatio = dimensions
@@ -803,7 +809,7 @@ function MediaFigure({
         </> : media?.previewUrl ? <span className="block-image-crop-layer" style={{ ...mediaPreviewStyle(media), backgroundSize: fit, backgroundPosition: `${focalPoint.x}% ${focalPoint.y}%`, transform: fit === "cover" ? `scale(${zoom / 100})` : undefined, transformOrigin: `${focalPoint.x}% ${focalPoint.y}%` }} aria-hidden="true" /> : null}
         <MediaInteractionOverlay
           interaction={interaction}
-          mediaId={mediaId}
+          media={media}
           label={alt || title || media?.name || "รูปภาพ"}
           disabled={interactionDisabled}
         />
@@ -896,27 +902,19 @@ function PdfViewer({
   config: import("../config/types").BlockConfigMap["pdfViewer"];
   align: "left" | "center" | "right";
 }) {
-  const media = getDemoMediaItem(config.mediaId);
+  const media = displayMediaFor(config);
   const url = media?.previewUrl ?? null;
-  const viewerUrl = url ? `${url}#navpanes=0&view=FitH` : null;
   return (
     <figure
-      className={`pdf-viewer height-${config.height} align-${align}`}
+      className={`pdf-viewer height-${config.height} align-${align}${url ? "" : " is-empty"}`}
     >
-      {viewerUrl ? (
-        <iframe
-          src={viewerUrl}
-          title={config.title || media?.name || "เอกสาร PDF"}
-          loading="lazy"
-        />
+      {url ? (
+        <ResponsivePdfEmbed url={url} title={config.title || media?.name || "เอกสาร PDF"} />
       ) : (
-        <div className="pdf-viewer-empty">
-          <span>PDF</span>
-          <p>
-            {media
-              ? "ไฟล์ตัวอย่างนี้ยังไม่มีเนื้อหา PDF กรุณาอัปโหลดไฟล์จริง"
-              : "เลือกไฟล์ PDF จากคลังสื่อเพื่อแสดงเอกสาร"}
-          </p>
+        <div className="article-video-empty">
+          {media
+            ? "ไฟล์ตัวอย่างนี้ยังไม่มีเนื้อหา PDF กรุณาอัปโหลดไฟล์จริง"
+            : config.mediaId ? "ยังไม่สามารถแสดงไฟล์ PDF" : "ยังไม่มีเอกสาร PDF"}
         </div>
       )}
     </figure>

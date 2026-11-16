@@ -3,7 +3,7 @@
 import { ArrowLeft, Building2, Camera, Check, LoaderCircle, Search, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionToast } from "@/components/admin/action-toast";
 import { personnelPhotoPositionStyle } from "@/features/units/components/personnel-photo-position";
@@ -24,23 +24,33 @@ export function AdminUserEditor({ user, options, currentUserId }: { user: UserDa
   const router = useRouter();
   const [toast, setToast] = useState<UserActionResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const formRef = useRef<HTMLFormElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const previewObjectUrl = useRef<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState(user.photoUrl);
   const [photoAction, setPhotoAction] = useState<"keep" | "replace" | "remove">("keep");
   const [photoFocus, setPhotoFocus] = useState({ x: user.profilePhotoFocusX, y: user.profilePhotoFocusY });
   const [photoZoom, setPhotoZoom] = useState(user.profilePhotoZoom);
-  useEffect(() => () => { if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current); }, []);
+  useLayoutEffect(() => () => {
+    formRef.current?.reset();
+    if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current);
+    previewObjectUrl.current = null;
+    setPhotoUrl(user.photoUrl);
+    setPhotoAction("keep");
+    setPhotoFocus({ x: user.profilePhotoFocusX, y: user.profilePhotoFocusY });
+    setPhotoZoom(user.profilePhotoZoom);
+    setToast(null);
+  }, [user]);
   function choosePhoto(file: File) { if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { if (photoInput.current) photoInput.current.value = ""; setToast({ ok: false, message: "รองรับรูป JPG, PNG หรือ WebP ขนาดไม่เกิน 5 MB" }); return; } if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current); previewObjectUrl.current = URL.createObjectURL(file); setPhotoUrl(previewObjectUrl.current); setPhotoAction("replace"); setPhotoFocus({ x: 50, y: 25 }); setPhotoZoom(100); }
   function removePhoto() { if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current); previewObjectUrl.current = null; if (photoInput.current) photoInput.current.value = ""; setPhotoUrl(null); setPhotoAction(user.photoUrl ? "remove" : "keep"); setPhotoFocus({ x: 50, y: 25 }); setPhotoZoom(100); }
   function save(formData: FormData) { setToast(null); startTransition(async () => { const result = await updateUserAction(formData); setToast(result); if (result.ok) router.refresh(); }); }
   return <main className="profile-page admin-user-edit-page">
     {toast ? <ActionToast ok={toast.ok} title={toast.ok ? "บันทึกข้อมูลแล้ว" : "บันทึกไม่สำเร็จ"} description={toast.message} onClose={() => setToast(null)}/> : null}
-    <Link className="admin-user-back" href="/admin/users"><ArrowLeft size={16}/>กลับไปบัญชีผู้ใช้งาน</Link>
-    <header><small>บัญชีผู้ใช้งาน</small><h1>แก้ไขโปรไฟล์ผู้ใช้</h1><p>แก้ไขข้อมูลบุคลากร ข้อมูลติดต่อ สิทธิ์ และหน่วยงานที่สังกัด</p></header>
+    <Link className="admin-user-back" href="/admin/users"><ArrowLeft size={16}/>ย้อนกลับ</Link>
+    <header><h1>แก้ไขโปรไฟล์ผู้ใช้</h1><p>แก้ไขข้อมูลบุคลากร ข้อมูลติดต่อ สิทธิ์ และหน่วยงานที่สังกัด</p></header>
     <div className="profile-grid">
       <aside className="profile-summary-card"><div className="profile-summary-identity"><span className="profile-summary-photo" style={user.photoUrl ? { backgroundImage: `url(${user.photoUrl})`, ...personnelPhotoPositionStyle({ x: user.profilePhotoFocusX, y: user.profilePhotoFocusY }, user.profilePhotoZoom) } : undefined}>{user.photoUrl ? null : <UserRound size={48}/>}</span><div><h2>{user.displayName}</h2><p>@{user.username}</p></div></div><dl className="profile-summary-details"><div><dt>ประเภทบุคลากร</dt><dd>{user.personType?.name ?? "ไม่ระบุ"}</dd></div><div><dt>ตำแหน่ง</dt><dd>{user.position?.name ?? "ไม่ระบุ"}</dd></div><div><dt>ระดับ</dt><dd>{user.level?.name ?? "ไม่ระบุ"}</dd></div><div><dt>สถานะบัญชี</dt><dd><span className={`users-status ${user.status === "ACTIVE" ? "active" : "disabled"}`}>{user.status === "ACTIVE" ? "ใช้งาน" : "ปิดใช้งาน"}</span></dd></div></dl><section className="profile-unit-summary"><h3><Building2 size={17}/>หน่วยงานที่สังกัด</h3>{user.memberships.length ? <ul>{user.memberships.map((item) => <li key={item.unitId}>{item.unit.name}{item.isPrimary ? <em>หน่วยงานหลัก</em> : null}</li>)}</ul> : <p>ยังไม่ได้กำหนดหน่วยงาน</p>}</section></aside>
-      <form action={save} className="profile-editor-form"><input type="hidden" name="id" value={user.id}/><input type="hidden" name="profileMediaId" value={user.profileMediaId ?? ""}/><input type="hidden" name="profilePhotoAction" value={photoAction}/><input type="hidden" name="profilePhotoFocusX" value={photoFocus.x}/><input type="hidden" name="profilePhotoFocusY" value={photoFocus.y}/><input type="hidden" name="profilePhotoZoom" value={photoZoom}/>
+      <form ref={formRef} action={save} className="profile-editor-form"><input type="hidden" name="id" value={user.id}/><input type="hidden" name="profileMediaId" value={user.profileMediaId ?? ""}/><input type="hidden" name="profilePhotoAction" value={photoAction}/><input type="hidden" name="profilePhotoFocusX" value={photoFocus.x}/><input type="hidden" name="profilePhotoFocusY" value={photoFocus.y}/><input type="hidden" name="profilePhotoZoom" value={photoZoom}/>
         <section className="profile-form-section"><header><h2>ข้อมูลบุคลากร</h2><p>แก้ไขชื่อ ประเภท ตำแหน่ง และระดับของผู้ใช้</p></header><div className="profile-details-grid"><label><span>ชื่อ-นามสกุล</span><input name="displayName" defaultValue={user.displayName} minLength={2} maxLength={160} required/></label><Select name="personTypeId" label="ประเภทบุคลากร" value={user.personTypeId} options={options.personTypes}/><Select name="positionId" label="ตำแหน่ง" value={user.positionId} options={options.positions}/><Select name="levelId" label="ระดับ" value={user.levelId} options={options.levels}/></div></section>
         <section className="profile-form-section"><header><h2>รูปโปรไฟล์</h2><p>เพิ่ม เปลี่ยน ลบ และจัดตำแหน่งรูปแทนผู้ใช้ได้</p></header><input ref={photoInput} name="profilePhoto" type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) choosePhoto(file); }}/>{photoUrl ? <div className="profile-photo-focus"><PersonnelPhotoFocusEditor imageStyle={{ backgroundImage: `url(${photoUrl})` }} value={photoFocus} onChange={setPhotoFocus} zoom={photoZoom} onZoomChange={setPhotoZoom} actions={<div className="profile-photo-actions"><button type="button" onClick={() => photoInput.current?.click()}><Upload size={15}/>เปลี่ยนรูป</button><button type="button" className="danger" onClick={removePhoto}><Trash2 size={15}/>ลบรูป</button></div>}/></div> : <div className="profile-photo-field"><span className="profile-photo-preview"><UserRound size={34}/><i><Camera size={14}/></i></span><div className="profile-photo-upload-copy"><div><strong>เลือกรูปโปรไฟล์</strong><p>{photoAction === "remove" ? "รูปจะถูกลบเมื่อกดบันทึกข้อมูล" : "ไฟล์ JPG, PNG หรือ WebP ขนาดไม่เกิน 5 MB"}</p></div><div className="profile-photo-actions"><button type="button" onClick={() => photoInput.current?.click()}><Upload size={15}/>เพิ่มรูป</button></div></div></div>}</section>
         <section className="profile-form-section"><header><h2>หน่วยงานที่สังกัด</h2><p>ค้นหาและเลือกได้หลายหน่วยงาน จากนั้นกำหนดหน่วยงานหลักจากรายการที่เลือก</p></header><UnitMembershipPicker options={options.units} initialIds={user.unitIds} initialPrimaryId={user.primaryUnitId}/></section>
@@ -65,6 +75,12 @@ function UnitMembershipPicker({ options, initialIds, initialPrimaryId }: { optio
   const [primaryId, setPrimaryId] = useState(initialPrimaryId ?? "");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  useLayoutEffect(() => () => {
+    setSelectedIds(initialIds);
+    setPrimaryId(initialPrimaryId ?? "");
+    setQuery("");
+    setOpen(false);
+  }, [initialIds, initialPrimaryId]);
   const selected = selectedIds.flatMap((id) => options.find((option) => option.id === id) ?? []);
   const matches = options.filter((option) => !selectedIds.includes(option.id) && option.name.toLocaleLowerCase("th").includes(query.trim().toLocaleLowerCase("th"))).slice(0, 8);
   function add(id: string) { setSelectedIds((current) => [...current, id]); setQuery(""); setOpen(true); }

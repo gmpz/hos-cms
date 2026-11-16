@@ -1,5 +1,7 @@
 "use client";
 
+import { createId } from "@/utils/create-id";
+
 import { DragDropContext, Draggable, Droppable, type DropResult } from "@hello-pangea/dnd";
 import { NativeSelect } from "@/components/ui/native-select";
 import { ChevronDown, Columns3, GripVertical, Plus, Rows3, Trash2 } from "lucide-react";
@@ -69,7 +71,7 @@ export function ProcessStepsSettings({ config, onChange }: SettingsProps<"proces
     </div>
     <div className="news-tabs-settings-heading process-steps-settings-heading">
       <strong>รายการขั้นตอน ({config.items.length}/12)</strong>
-      <button type="button" disabled={config.items.length >= 12} onClick={() => onChange({ ...config, items: [...config.items, { id: crypto.randomUUID(), title: "ขั้นตอนใหม่", description: "" }] })}><Plus size={13}/> เพิ่มขั้นตอน</button>
+      <button type="button" disabled={config.items.length >= 12} onClick={() => onChange({ ...config, items: [...config.items, { id: createId(), title: "ขั้นตอนใหม่", description: "" }] })}><Plus size={13}/> เพิ่มขั้นตอน</button>
     </div>
     <DragDropContext onDragEnd={reorderItems}>
       <Droppable droppableId="process-step-items">
@@ -165,7 +167,7 @@ export function TimelineSettings({ config, onChange }: SettingsProps<"timeline">
     <HeadingFields title={config.title} description={config.description} onChange={(value) => onChange({ ...config, ...value })}/>
     <div className="news-tabs-settings-heading timeline-settings-heading">
       <strong>รายการเหตุการณ์ ({config.items.length}/20)</strong>
-      <button type="button" disabled={config.items.length >= 20} onClick={() => onChange({ ...config, items: [...config.items, { id: crypto.randomUUID(), date: "", title: "เหตุการณ์ใหม่", description: "" }] })}><Plus size={13}/> เพิ่มเหตุการณ์</button>
+      <button type="button" disabled={config.items.length >= 20} onClick={() => onChange({ ...config, items: [...config.items, { id: createId(), date: "", title: "เหตุการณ์ใหม่", description: "" }] })}><Plus size={13}/> เพิ่มเหตุการณ์</button>
     </div>
     <DragDropContext onDragEnd={reorderItems}>
       <Droppable droppableId="timeline-items">

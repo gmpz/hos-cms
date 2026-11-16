@@ -1,38 +1,42 @@
 "use client";
+import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 import Link from "next/link";
 import {
   AlertCircle,
+  Archive,
   Building2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Eye,
   EyeOff,
+  FileText,
   MoreHorizontal,
   Pencil,
   Plus,
   Search,
+  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PendingDraftStatus, StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AdminTableLoadingRows } from "@/components/admin/admin-content-loading";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import type { DemoUnit } from "../demo/model";
 import { readUnits, refreshUnits, reorderUnits } from "../demo/storage";
+import { unitCoverStyle } from "./unit-cover-style";
 
 const subscribeToHydration = () => () => undefined;
-const pageSize = 10;
+const deletedDateFormat = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" });
+const confirmationCharacters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-function paginationItems(current: number, total: number) {
-  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
-  return [...new Set([1, total, current - 1, current, current + 1])]
-    .filter((page) => page > 0 && page <= total)
-    .sort((left, right) => left - right);
+function newConfirmationCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes, (byte) => confirmationCharacters[byte % confirmationCharacters.length]).join("");
 }
+
+
 
 function UnitActionsMenu({
   unit,
@@ -107,6 +111,7 @@ function UnitActionsMenu({
         type="button"
         disabled={disabled}
         aria-label={`ตัวเลือกเพิ่มเติม ${unit.name}`}
+        title="ตัวเลือกเพิ่มเติม"
         aria-haspopup="menu"
         aria-expanded={Boolean(position)}
         onClick={toggleMenu}
@@ -162,18 +167,25 @@ export function UnitsManager() {
     () => false,
   );
   const [units, setUnits] = useState<DemoUnit[]>(() => readUnits(true));
+  const [deletedUnits, setDeletedUnits] = useState<DemoUnit[]>(() => readUnits(true, true));
+  const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft" | "trash">("all");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState<DemoUnit | null>(null);
   const [pendingDeleteUnit, setPendingDeleteUnit] = useState<DemoUnit | null>(
     null,
   );
+  const [pendingRestoreUnit, setPendingRestoreUnit] = useState<DemoUnit | null>(null);
+  const [pendingPurgeUnit, setPendingPurgeUnit] = useState<DemoUnit | null>(null);
+  const [confirmationCode, setConfirmationCode] = useState("");
+  const [confirmationText, setConfirmationText] = useState("");
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   async function moveUnit(unit: DemoUnit, direction: "up" | "down") {
-    if (reordering || search.trim()) return;
+    if (reordering || search.trim() || statusFilter !== "all") return;
     const index = units.findIndex((entry) => entry.id === unit.id);
     const target = direction === "up" ? index - 1 : index + 1;
     if (index < 0 || target < 0 || target >= units.length) return;
@@ -238,10 +250,12 @@ export function UnitsManager() {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "ลบกลุ่มงานไม่สำเร็จ");
-      setUnits(await refreshUnits(true));
+      const [active, deleted] = await Promise.all([refreshUnits(true), refreshUnits(true, true)]);
+      setUnits(active);
+      setDeletedUnits(deleted);
       showGlobalToast({
-        title: "ลบกลุ่มงานแล้ว",
-        description: `ลบ “${unit.name}” ออกจากระบบเรียบร้อย`,
+        title: "ย้ายกลุ่มงานไปถังขยะแล้ว",
+        description: `“${unit.name}” สามารถกู้คืนได้จากถังขยะ`,
         variant: "success",
       });
       setPendingDeleteUnit(null);
@@ -256,11 +270,45 @@ export function UnitsManager() {
       setWorkingId(null);
     }
   }
+  async function handleRestore(unit: DemoUnit) {
+    if (workingId) return;
+    setWorkingId(unit.id);
+    try {
+      const response = await fetch(`/api/units/${unit.id}/restore`, { method: "POST" });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "กู้คืนกลุ่มงานไม่สำเร็จ");
+      const [active, deleted] = await Promise.all([refreshUnits(true), refreshUnits(true, true)]);
+      setUnits(active);
+      setDeletedUnits(deleted);
+      setPendingRestoreUnit(null);
+      showGlobalToast({ title: "กู้คืนกลุ่มงานแล้ว", description: `“${unit.name}” กลับมาเป็นฉบับร่าง`, variant: "success" });
+    } catch (error) {
+      showGlobalToast({ title: "กู้คืนกลุ่มงานไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
+    } finally {
+      setWorkingId(null);
+    }
+  }
+  async function handlePurge(unit: DemoUnit) {
+    if (workingId || confirmationText.trim() !== confirmationCode) return;
+    setWorkingId(unit.id);
+    try {
+      const response = await fetch(`/api/units/${unit.id}/purge`, { method: "POST" });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "ลบกลุ่มงานถาวรไม่สำเร็จ");
+      setDeletedUnits(await refreshUnits(true, true));
+      setPendingPurgeUnit(null);
+      showGlobalToast({ title: "ลบกลุ่มงานถาวรแล้ว", description: `“${unit.name}” ถูกลบออกจากระบบและกู้คืนไม่ได้`, variant: "success" });
+    } catch (error) {
+      showGlobalToast({ title: "ลบกลุ่มงานถาวรไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
+    } finally {
+      setWorkingId(null);
+    }
+  }
   useEffect(() => {
     let active = true;
-    void refreshUnits(true)
-      .then((rows) => {
-        if (active) setUnits(rows);
+    void Promise.all([refreshUnits(true), refreshUnits(true, true)])
+      .then(([rows, deleted]) => {
+        if (active) { setUnits(rows); setDeletedUnits(deleted); }
       })
       .catch(() => {
         if (active) setLoadError(true);
@@ -273,14 +321,15 @@ export function UnitsManager() {
     };
   }, []);
   const tableLoading = !hydrated || loading;
-  const filtered = units.filter((unit) =>
+  const filtered = (statusFilter === "trash" ? deletedUnits : units).filter((unit) =>
+    (statusFilter === "all" || statusFilter === "trash" || unit.status === statusFilter) &&
     unit.name.toLocaleLowerCase("th").includes(search.toLocaleLowerCase("th")),
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const visibleUnits = filtered.slice(pageStart, pageStart + pageSize);
-  const pageNumbers = paginationItems(safePage, totalPages);
+
   return (
     <div className="units-manager">
       <header className="units-heading">
@@ -293,6 +342,24 @@ export function UnitsManager() {
           สร้างกลุ่มงาน
         </Link>
       </header>
+      <section className="unit-summary document-summary" aria-label="กรองกลุ่มงานตามสถานะ">
+        <button type="button" aria-pressed={statusFilter === "all"} onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}>
+          <span className="document-summary-icon"><Building2 size={19} /></span>
+          <span className="document-summary-copy">กลุ่มงานทั้งหมด<strong>{tableLoading ? "—" : units.length}</strong></span>
+        </button>
+        <button type="button" aria-pressed={statusFilter === "published"} onClick={() => { setStatusFilter("published"); setCurrentPage(1); }}>
+          <span className="document-summary-icon"><FileText size={19} /></span>
+          <span className="document-summary-copy">เผยแพร่แล้ว<strong>{tableLoading ? "—" : units.filter((unit) => unit.status === "published").length}</strong></span>
+        </button>
+        <button type="button" aria-pressed={statusFilter === "draft"} onClick={() => { setStatusFilter("draft"); setCurrentPage(1); }}>
+          <span className="document-summary-icon"><Archive size={19} /></span>
+          <span className="document-summary-copy">ฉบับร่าง<strong>{tableLoading ? "—" : units.filter((unit) => unit.status === "draft").length}</strong></span>
+        </button>
+        <button type="button" aria-pressed={statusFilter === "trash"} onClick={() => { setStatusFilter("trash"); setCurrentPage(1); }}>
+          <span className="document-summary-icon"><Trash2 size={19} /></span>
+          <span className="document-summary-copy">อยู่ในถังขยะ<strong>{tableLoading ? "—" : deletedUnits.length}</strong></span>
+        </button>
+      </section>
       <div className="units-toolbar">
         <label>
           <Search size={16} />
@@ -305,13 +372,14 @@ export function UnitsManager() {
             placeholder="ค้นหากลุ่มงาน..."
           />
         </label>
-        <span>
-          {tableLoading ? "กำลังโหลด..." : `${filtered.length} หน่วยงาน`}
-        </span>
       </div>
-      <section className="units-table" aria-busy={tableLoading}>
+      <div className="news-list-switch" role="group" aria-label="เลือกรายการหน่วยงาน">
+        <button type="button" className={statusFilter !== "trash" ? "active" : ""} aria-pressed={statusFilter !== "trash"} onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}>รายการหน่วยงาน</button>
+        <button type="button" className={statusFilter === "trash" ? "active" : ""} aria-pressed={statusFilter === "trash"} onClick={() => { setStatusFilter("trash"); setCurrentPage(1); }}><Trash2 size={15} />ถังขยะ{deletedUnits.length ? ` (${deletedUnits.length})` : ""}</button>
+      </div>
+      <section className="units-table admin-data-table" aria-busy={tableLoading}>
         <div
-          className="admin-list-table-scroll"
+          className="admin-list-table-scroll admin-data-table-scroll"
           tabIndex={0}
           role="region"
           aria-label="ตารางหน่วยงาน เลื่อนซ้ายขวาได้"
@@ -322,20 +390,19 @@ export function UnitsManager() {
                 <th>ลำดับ</th>
                 <th>หน่วยงาน</th>
                 <th>URL</th>
-                <th>ส่วนประกอบ</th>
                 <th>สถานะ</th>
-                <th>อัปเดตล่าสุด</th>
-                <th className="units-actions-heading" scope="col">
+                <th>{statusFilter === "trash" ? "ลบเมื่อ" : "อัปเดตล่าสุด"}</th>
+                <th className="units-actions-heading admin-table-actions-heading" scope="col">
                   จัดการ
                 </th>
               </tr>
             </thead>
             <tbody>
               {tableLoading ? (
-                <AdminTableLoadingRows columns={7} />
+                <AdminTableLoadingRows columns={6} />
               ) : loadError ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     <div className="units-empty" role="alert">
                       <AlertCircle size={28} />
                       <strong>โหลดรายการหน่วยงานไม่สำเร็จ</strong>
@@ -343,8 +410,10 @@ export function UnitsManager() {
                     </div>
                   </td>
                 </tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={6}><div className="units-empty"><Search size={28} /><strong>{statusFilter === "trash" && !search.trim() ? "ถังขยะว่าง" : "ไม่พบกลุ่มงาน"}</strong><p>{search.trim() ? "ลองเปลี่ยนคำค้นหา" : statusFilter === "trash" ? "กลุ่มงานที่ลบจะปรากฏที่นี่" : "ลองเลือกสถานะอื่น หรือสร้างกลุ่มงานใหม่"}</p></div></td></tr>
               ) : (
-                visibleUnits.map((unit) => {
+                visibleUnits.map((unit, visibleIndex) => {
                   const orderIndex = units.findIndex(
                     (entry) => entry.id === unit.id,
                   );
@@ -353,12 +422,12 @@ export function UnitsManager() {
                     <tr key={unit.id}>
                       <td>
                         <div className="category-arrow-order unit-arrow-order">
-                          <span>{orderIndex + 1}</span>
-                          <div>
+                          <span>{statusFilter === "trash" ? pageStart + visibleIndex + 1 : orderIndex + 1}</span>
+                          {statusFilter !== "trash" ? <div>
                             <button
                               type="button"
                               disabled={
-                                reordering || searching || orderIndex === 0
+                                reordering || searching || statusFilter !== "all" || orderIndex === 0
                               }
                               title={
                                 searching
@@ -375,6 +444,7 @@ export function UnitsManager() {
                               disabled={
                                 reordering ||
                                 searching ||
+                                statusFilter !== "all" ||
                                 orderIndex === units.length - 1
                               }
                               title={
@@ -387,13 +457,22 @@ export function UnitsManager() {
                             >
                               <ChevronDown size={14} />
                             </button>
-                          </div>
+                          </div> : null}
                         </div>
                       </td>
                       <td>
-                        <div className="unit-name">
-                          <span>
-                            <Building2 size={18} />
+                        <div className="unit-name admin-table-primary">
+                          <span className="unit-table-cover">
+                            {unit.coverImageUrl ? (
+                              <span
+                                className="unit-cover-image-layer"
+                                style={unitCoverStyle(
+                                  { backgroundImage: `url(${unit.coverImageUrl})` },
+                                  unit.coverFocus ?? { x: 50, y: 50 },
+                                )}
+                                aria-hidden="true"
+                              />
+                            ) : <Building2 size={18} />}
                           </span>
                           <div>
                             <strong>{unit.name}</strong>
@@ -405,31 +484,24 @@ export function UnitsManager() {
                         <code>/units/{unit.slug}</code>
                       </td>
                       <td>
-                        <span className="unit-section-count">
-                          {
-                            unit.sectionOrder.filter(
-                              (section) => unit.sectionVisibility[section],
-                            ).length
-                          }{" "}
-                          ส่วน
-                        </span>
+                        {statusFilter === "trash" ? <span className="unit-trash-status">อยู่ในถังขยะ</span> : <StatusBadge status={unit.status} />}
+                        {statusFilter !== "trash" && unit.hasUnpublishedChanges ? <PendingDraftStatus /> : null}
                       </td>
                       <td>
-                        <StatusBadge status={unit.status} />
-                        {unit.hasUnpublishedChanges ? (
-                          <small className="unit-pending-draft">
-                            มีร่างค้าง
-                          </small>
-                        ) : null}
+                        <small>{statusFilter === "trash" && unit.deletedAt ? deletedDateFormat.format(new Date(unit.deletedAt)) : unit.updatedAt}</small>
                       </td>
                       <td>
-                        <small>{unit.updatedAt}</small>
-                      </td>
-                      <td>
-                        <div className="unit-actions">
+                        <div className="unit-actions admin-table-actions">
+                          {statusFilter === "trash" ? (
+                            <>
+                              <button type="button" disabled={workingId === unit.id} aria-label={`กู้คืน ${unit.name}`} title="กู้คืน" onClick={() => setPendingRestoreUnit(unit)}><RotateCcw size={17} /></button>
+                              <button type="button" className="danger" disabled={workingId === unit.id} aria-label={`ลบ ${unit.name} ถาวร`} title="ลบถาวร" onClick={() => { setConfirmationText(""); setConfirmationCode(newConfirmationCode()); setPendingPurgeUnit(unit); }}><Trash2 size={17} /></button>
+                            </>
+                          ) : <>
                           <Link
                             href={`/admin/units/${unit.id}/edit`}
                             aria-label={`แก้ไข ${unit.name}`}
+                            title="แก้ไขหน่วยงาน"
                           >
                             <Pencil size={17} />
                           </Link>
@@ -438,6 +510,7 @@ export function UnitsManager() {
                               href={`/units/${unit.publishedSlug}`}
                               target="_blank"
                               aria-label={`ดู ${unit.name}`}
+                              title="ดูหน่วยงานบนเว็บไซต์"
                             >
                               <Eye size={17} />
                             </Link>
@@ -459,6 +532,7 @@ export function UnitsManager() {
                               else setPendingDeleteUnit(unit);
                             }}
                           />
+                          </>}
                         </div>
                       </td>
                     </tr>
@@ -468,53 +542,8 @@ export function UnitsManager() {
             </tbody>
           </table>
         </div>
-        {!tableLoading && !loadError && filtered.length === 0 ? (
-          <div className="units-empty">
-            <Search size={28} />
-            <strong>ไม่พบกลุ่มงาน</strong>
-            <p>ลองเปลี่ยนคำค้นหา หรือสร้างกลุ่มงานใหม่</p>
-          </div>
-        ) : !tableLoading && !loadError ? (
-          <div className="pages-pagination units-pagination">
-            <p>
-              แสดง {pageStart + 1}–
-              {Math.min(pageStart + pageSize, filtered.length)} จาก{" "}
-              {filtered.length} รายการ
-            </p>
-            <nav aria-label="เปลี่ยนหน้ารายการหน่วยงาน">
-              <button
-                type="button"
-                disabled={safePage === 1}
-                onClick={() => setCurrentPage(safePage - 1)}
-                aria-label="หน้าก่อนหน้า"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              {pageNumbers.map((page, index) => (
-                <span key={page}>
-                  {index > 0 && page - pageNumbers[index - 1] > 1 ? (
-                    <i>…</i>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={page === safePage ? "active" : ""}
-                    aria-current={page === safePage ? "page" : undefined}
-                    onClick={() => setCurrentPage(page)}
-                  >
-                    {page}
-                  </button>
-                </span>
-              ))}
-              <button
-                type="button"
-                disabled={safePage === totalPages}
-                onClick={() => setCurrentPage(safePage + 1)}
-                aria-label="หน้าถัดไป"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </nav>
-          </div>
+        {!tableLoading && !loadError && filtered.length > 0 ? (
+          <AdminTablePagination className="units-pagination" page={safePage} pageCount={totalPages} pageSize={pageSize} total={filtered.length} label="เปลี่ยนหน้ารายการหน่วยงาน" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
         ) : null}
       </section>
       {pendingUnit ? (
@@ -535,8 +564,8 @@ export function UnitsManager() {
         <ConfirmDialog
           variant="danger"
           title={`ลบกลุ่มงาน “${pendingDeleteUnit.name}”?`}
-          description="กลุ่มงานจะถูกลบถาวร หากยังมีข่าว เอกสาร หรือถูกใช้กำหนดสิทธิ์ ระบบจะไม่อนุญาตให้ลบ"
-          confirmLabel="ลบกลุ่มงาน"
+          description="กลุ่มงานจะถูกย้ายไปถังขยะและสามารถกู้คืนได้ หากยังมีข่าว เอกสาร หรือถูกใช้กำหนดสิทธิ์ ระบบจะไม่อนุญาตให้ลบ"
+          confirmLabel="ย้ายไปถังขยะ"
           pending={workingId === pendingDeleteUnit.id}
           onClose={() => {
             if (!workingId) setPendingDeleteUnit(null);
@@ -545,6 +574,33 @@ export function UnitsManager() {
             void handleDelete(pendingDeleteUnit);
           }}
         />
+      ) : null}
+      {pendingRestoreUnit ? (
+        <ConfirmDialog
+          variant="default"
+          title={`กู้คืนกลุ่มงาน “${pendingRestoreUnit.name}”?`}
+          description="กลุ่มงานจะกลับมาเป็นฉบับร่าง และยังไม่แสดงบนเว็บไซต์"
+          confirmLabel="กู้คืนกลุ่มงาน"
+          pending={workingId === pendingRestoreUnit.id}
+          onClose={() => { if (!workingId) setPendingRestoreUnit(null); }}
+          onConfirm={() => { void handleRestore(pendingRestoreUnit); }}
+        />
+      ) : null}
+      {pendingPurgeUnit ? (
+        <div className="modal-layer" onKeyDown={(event) => { if (event.key === "Escape" && !workingId) setPendingPurgeUnit(null); }}>
+          <button type="button" className="modal-backdrop" aria-label="ปิดหน้าต่างยืนยัน" onClick={() => { if (!workingId) setPendingPurgeUnit(null); }} />
+          <div className="cms-confirm-dialog news-purge-dialog" role="alertdialog" aria-modal="true" aria-labelledby="unit-purge-title" aria-describedby="unit-purge-description">
+            <div className="cms-confirm-dialog-icon" aria-hidden="true"><Trash2 size={30} /></div>
+            <h2 id="unit-purge-title">ลบกลุ่มงานถาวร?</h2>
+            <p id="unit-purge-description">กลุ่มงาน “{pendingPurgeUnit.name}” จะถูกลบออกจากระบบและกู้คืนไม่ได้</p>
+            <label htmlFor="unit-purge-confirm">พิมพ์รหัส <strong className="news-purge-code">{confirmationCode}</strong> เพื่อยืนยัน</label>
+            <input id="unit-purge-confirm" autoFocus value={confirmationText} onChange={(event) => setConfirmationText(event.target.value.toUpperCase())} autoComplete="off" autoCapitalize="characters" maxLength={6} />
+            <div className="cms-confirm-dialog-actions">
+              <button type="button" disabled={workingId !== null} onClick={() => setPendingPurgeUnit(null)}>ยกเลิก</button>
+              <button type="button" className="cms-confirm-dialog-danger" disabled={workingId !== null || !confirmationCode || confirmationText.trim() !== confirmationCode} onClick={() => { void handlePurge(pendingPurgeUnit); }}>ลบถาวร</button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

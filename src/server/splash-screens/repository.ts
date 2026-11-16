@@ -66,7 +66,8 @@ function parseInput(value: unknown): Input {
   return input;
 }
 
-export async function listSplashScreens() { return (await prisma.announcement.findMany({ where: { deletedAt: null, displayMode: "SPLASH" }, include, orderBy: { updatedAt: "desc" } })).map(toDto); }
+export async function listSplashScreens() { return (await prisma.announcement.findMany({ where: { deletedAt: null, displayMode: "SPLASH" }, include, orderBy: [{ createdAt: "desc" }, { id: "asc" }] })).map(toDto); }
+export async function listDeletedSplashScreens() { return (await prisma.announcement.findMany({ where: { deletedAt: { not: null }, displayMode: "SPLASH" }, include, orderBy: [{ createdAt: "desc" }, { id: "asc" }] })).map(toDto); }
 export async function getSplashScreen(id: string) { const row = await prisma.announcement.findFirst({ where: { id, deletedAt: null, displayMode: "SPLASH" }, include }); return row ? adminDto(row) : null; }
 export async function getActiveSplashScreen() {
   const row = await prisma.announcement.findFirst({ where: { deletedAt: null, displayMode: "SPLASH", status: "PUBLISHED", splashSlot: 1, publishedSnapshot: { not: Prisma.DbNull } }, include });

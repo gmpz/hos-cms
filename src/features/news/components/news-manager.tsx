@@ -1,13 +1,16 @@
 "use client";
-import { AlertCircle, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, FileText, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+
+import { createId } from "@/utils/create-id";
+import { AlertCircle, Copy, Eye, EyeOff, FileText, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PendingDraftStatus, StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AdminTableLoadingRows } from "@/components/admin/admin-content-loading";
+import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 import { CategorySelect } from "@/features/categories/components/category-select";
 import type { DemoPost } from "@/features/pages/demo/data";
 import type { DemoUnit } from "@/features/units/demo/model";
@@ -16,7 +19,6 @@ import { categoriesChangedEvent, categoryName, readCategories } from "@/features
 import type { DemoCategory } from "@/features/categories/types";
 import { actOnPost, postsChangeEvent } from "../demo/storage";
 import { fetchPostListPage, type PostListPage } from "../list-page";
-const pageSize = 10;
 const confirmationCharacters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function newConfirmationCode(): string {
@@ -24,12 +26,6 @@ function newConfirmationCode(): string {
   return Array.from(bytes, (byte) => confirmationCharacters[byte % confirmationCharacters.length]).join("");
 }
 
-function paginationItems(current: number, total: number) {
-  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
-  return [...new Set([1, total, current - 1, current, current + 1])]
-    .filter((page) => page > 0 && page <= total)
-    .sort((left, right) => left - right);
-}
 
 function NewsActionsMenu({ post, disabled, onAction }: { post: DemoPost; disabled: boolean; onAction: (action: "duplicate" | "unpublish" | "delete") => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -74,7 +70,7 @@ function NewsActionsMenu({ post, disabled, onAction }: { post: DemoPost; disable
   }
 
   return <>
-    <button ref={triggerRef} type="button" disabled={disabled} aria-label={`ตัวเลือกเพิ่มเติม ${post.title}`} aria-haspopup="menu" aria-expanded={Boolean(position)} onClick={toggleMenu}><MoreHorizontal size={18}/></button>
+    <button ref={triggerRef} type="button" disabled={disabled} title="ตัวเลือกเพิ่มเติม" aria-label={`ตัวเลือกเพิ่มเติม ${post.title}`} aria-haspopup="menu" aria-expanded={Boolean(position)} onClick={toggleMenu}><MoreHorizontal size={18}/></button>
     {position ? createPortal(<div ref={menuRef} className="news-actions-menu" role="menu" aria-label={`จัดการ ${post.title}`} style={position}>
       <button type="button" role="menuitem" onClick={() => { setPosition(null); onAction("duplicate"); }}><Copy size={15}/>คัดลอกเป็นฉบับร่าง</button>
       {post.status === "published" ? <button type="button" role="menuitem" onClick={() => { setPosition(null); onAction("unpublish"); }}><EyeOff size={15}/>ยกเลิกเผยแพร่</button> : null}
@@ -98,21 +94,22 @@ export function NewsManager() {
   const [status, setStatus] = useState<"all" | "draft" | "published">("all");
   const [unitId, setUnitId] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [pendingAction, setPendingAction] = useState<{ action: "unpublish" | "delete" | "restore" | "purge"; post: DemoPost } | null>(null);
   const [confirmationText, setConfirmationText] = useState("");
   const [confirmationCode, setConfirmationCode] = useState("");
   const [workingId, setWorkingId] = useState<string | null>(null);
   const setToast = showGlobalToast;
-  const queryKey = JSON.stringify([currentPage, debouncedSearch, categoryId, status, unitId, year, showTrash, refreshKey]);
+  const queryKey = JSON.stringify([currentPage, pageSize, debouncedSearch, categoryId, status, unitId, year, showTrash, refreshKey]);
   const loading = loadedKey !== queryKey;
   async function runAction(post: DemoPost, action: "duplicate" | "unpublish" | "delete" | "restore" | "purge") {
     if (workingId) return;
     setWorkingId(post.id);
     try {
       await actOnPost(post, action);
-      setToast({ id: crypto.randomUUID(), title: action === "duplicate" ? "คัดลอกข่าวแล้ว" : action === "unpublish" ? "ยกเลิกเผยแพร่แล้ว" : action === "restore" ? "กู้คืนข่าวแล้ว" : action === "purge" ? "ลบข่าวถาวรแล้ว" : "ลบข่าวแล้ว", description: action === "duplicate" ? `“${post.title}” ถูกคัดลอกเป็นฉบับร่าง` : action === "unpublish" ? `“${post.title}” ไม่แสดงบนเว็บไซต์แล้ว` : action === "restore" ? `“${post.title}” กลับสู่รายการข่าวเป็นฉบับร่าง` : action === "purge" ? `ลบรายการ “${post.title}” ถาวรแล้ว โดยคงไฟล์ไว้ในคลังสื่อ` : `นำ “${post.title}” ออกจากรายการแล้ว`, variant: "success" });
+      setToast({ id: createId(), title: action === "duplicate" ? "คัดลอกข่าวแล้ว" : action === "unpublish" ? "ยกเลิกเผยแพร่แล้ว" : action === "restore" ? "กู้คืนข่าวแล้ว" : action === "purge" ? "ลบข่าวถาวรแล้ว" : "ลบข่าวแล้ว", description: action === "duplicate" ? `“${post.title}” ถูกคัดลอกเป็นฉบับร่าง` : action === "unpublish" ? `“${post.title}” ไม่แสดงบนเว็บไซต์แล้ว` : action === "restore" ? `“${post.title}” กลับสู่รายการข่าวเป็นฉบับร่าง` : action === "purge" ? `ลบรายการ “${post.title}” ถาวรแล้ว โดยคงไฟล์ไว้ในคลังสื่อ` : `นำ “${post.title}” ออกจากรายการแล้ว`, variant: "success" });
     } catch (error) {
-      setToast({ id: crypto.randomUUID(), title: "จัดการข่าวไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
+      setToast({ id: createId(), title: "จัดการข่าวไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
     } finally {
       setPendingAction(null);
       setConfirmationText("");
@@ -144,8 +141,8 @@ export function NewsManager() {
   }, [search]);
   useEffect(() => {
     const controller = new AbortController();
-    const requestKey = JSON.stringify([currentPage, debouncedSearch, categoryId, status, unitId, year, showTrash, refreshKey]);
-    void fetchPostListPage("admin", { page: currentPage, search: debouncedSearch, category: categoryId, status, unit: unitId, year, trash: showTrash ? 1 : 0 }, controller.signal)
+    const requestKey = JSON.stringify([currentPage, pageSize, debouncedSearch, categoryId, status, unitId, year, showTrash, refreshKey]);
+    void fetchPostListPage("admin", { page: currentPage, size: pageSize, search: debouncedSearch, category: categoryId, status, unit: unitId, year, trash: showTrash ? 1 : 0 }, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
         setPostPage(result);
@@ -161,13 +158,12 @@ export function NewsManager() {
         setLoadedKey(requestKey);
       });
     return () => controller.abort();
-  }, [currentPage, debouncedSearch, categoryId, status, unitId, year, showTrash, refreshKey]);
+  }, [currentPage, pageSize, debouncedSearch, categoryId, status, unitId, year, showTrash, refreshKey]);
   const total = postPage?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = postPage?.page ?? 1;
-  const pageStart = (safePage - 1) * pageSize;
   const visiblePosts = postPage?.items ?? [];
-  const pageNumbers = paginationItems(safePage, totalPages);
+
   return (
     <div className="news-manager">
       <header className="news-heading">
@@ -232,9 +228,8 @@ export function NewsManager() {
         </NativeSelect> : null}
       </div>
       <div className="news-list-switch"><button type="button" className={!showTrash ? "active" : ""} onClick={() => { setShowTrash(false); setCurrentPage(1); }}>รายการข่าว</button><button type="button" className={showTrash ? "active" : ""} onClick={() => { setShowTrash(true); setCurrentPage(1); }}><Trash2 size={15} />ถังขยะ{postPage?.trashTotal ? ` (${postPage.trashTotal})` : ""}</button></div>
-      {showTrash ? <div className="news-trash-note" role="note"><span><RotateCcw size={17}/></span><div><strong>รายการที่กู้คืนจะกลับเป็นฉบับร่าง</strong><small>ตรวจสอบข่าวก่อนนำกลับไปแก้ไขหรือเผยแพร่อีกครั้ง</small></div></div> : null}
-      <section className="news-table" aria-busy={loading}>
-        <div className="admin-list-table-scroll" tabIndex={0} role="region" aria-label="ตารางข่าว เลื่อนซ้ายขวาได้">
+      <section className="news-table admin-data-table" aria-busy={loading}>
+        <div className="admin-list-table-scroll admin-data-table-scroll" tabIndex={0} role="region" aria-label="ตารางข่าว เลื่อนซ้ายขวาได้">
         <table>
           <thead>
             <tr>
@@ -243,15 +238,16 @@ export function NewsManager() {
               <th>แสดงใน</th>
               <th>สถานะ</th>
               <th>{showTrash ? "ลบเมื่อ" : "เผยแพร่"}</th>
-              <th className="news-actions-heading" scope="col">จัดการ</th>
+              <th className="news-actions-heading admin-table-actions-heading" scope="col">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {loading ? <AdminTableLoadingRows columns={6} /> : null}
+            {!loading && !loadError && total === 0 ? <tr><td colSpan={6}><div className="news-empty"><Search size={28} /><strong>{showTrash ? "ไม่มีข่าวในถังขยะ" : "ไม่พบข่าว"}</strong><p>{showTrash ? "ข่าวที่ลบจะปรากฏที่นี่เพื่อให้กู้คืนหรือลบถาวร" : "ลองเปลี่ยนคำค้นหาหรือตัวกรอง"}</p></div></td></tr> : null}
             {!loading && visiblePosts.map((post) => (
               <tr key={post.id}>
                 <td>
-                  <div className="news-title-cell">
+                  <div className="news-title-cell admin-table-primary">
                     <span>
                       <FileText size={18} />
                     </span>
@@ -261,22 +257,21 @@ export function NewsManager() {
                     </div>
                   </div>
                 </td>
-                <td>
-                  <span className="news-kind">{categoryName(categories, post.categoryId)}</span>
-                </td>
+                <td>{categoryName(categories, post.categoryId)}</td>
                 <td>{post.owner}</td>
                 <td>
-                  {showTrash ? <span className="news-deleted-status">อยู่ในถังขยะ</span> : <><StatusBadge status={post.status} />{post.hasUnpublishedChanges ? <small className="news-pending-changes">มีร่างรอเผยแพร่</small> : null}</>}
+                  {showTrash ? <span className="news-deleted-status">อยู่ในถังขยะ</span> : <><StatusBadge status={post.status} />{post.hasUnpublishedChanges ? <PendingDraftStatus /> : null}</>}
                 </td>
                 <td>
                   <small>{showTrash ? post.deletedAt ?? "—" : post.publishedAt ?? "—"}</small>
                 </td>
                 <td>
-                  <div className="news-actions">
+                  <div className="news-actions admin-table-actions">
                     {showTrash ? <><button type="button" disabled={workingId === post.id} title="กู้คืนข่าว" aria-label={`กู้คืน ${post.title}`} onClick={() => setPendingAction({ action: "restore", post })}><RotateCcw size={17} /></button><button type="button" className="danger" disabled={workingId === post.id} title="ลบถาวร" aria-label={`ลบ ${post.title} ถาวร`} onClick={() => { setConfirmationText(""); setConfirmationCode(newConfirmationCode()); setPendingAction({ action: "purge", post }); }}><Trash2 size={17} /></button></> : <>
                     <Link
                       href={`/admin/posts/${post.id}/edit`}
                       aria-label={`แก้ไข ${post.title}`}
+                      title="แก้ไขข่าว"
                     >
                       <Pencil size={15} />
                     </Link>
@@ -285,6 +280,7 @@ export function NewsManager() {
                         href={`/news/${post.slug}`}
                         target="_blank"
                         aria-label={`ดู ${post.title}`}
+                        title="ดูข่าวบนเว็บไซต์"
                       >
                         <Eye size={15} />
                       </Link>
@@ -300,28 +296,8 @@ export function NewsManager() {
           </tbody>
         </table>
         </div>
-        {!loading && loadError ? <div className="news-empty" role="alert"><AlertCircle size={28} /><strong>โหลดข่าวไม่สำเร็จ</strong><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองใหม่</button></div> : !loading && total === 0 ? (
-          <div className="news-empty">
-            <Search size={28} />
-            <strong>{showTrash ? "ไม่มีข่าวในถังขยะ" : "ไม่พบข่าว"}</strong>
-            <p>{showTrash ? "ข่าวที่ลบจะปรากฏที่นี่เพื่อให้กู้คืนหรือลบถาวร" : "ลองเปลี่ยนคำค้นหาหรือตัวกรอง"}</p>
-          </div>
-        ) : !loading ? (
-          <div className="pages-pagination news-pagination">
-            <p>
-              แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, total)} จาก {total} รายการ
-            </p>
-            <nav aria-label="เปลี่ยนหน้ารายการข่าวและผลงาน">
-              <button type="button" disabled={safePage === 1} onClick={() => setCurrentPage(safePage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16}/></button>
-              {pageNumbers.map((page, index) => (
-                <span key={page}>
-                  {index > 0 && page - pageNumbers[index - 1] > 1 ? <i>…</i> : null}
-                  <button type="button" className={page === safePage ? "active" : ""} aria-current={page === safePage ? "page" : undefined} onClick={() => setCurrentPage(page)}>{page}</button>
-                </span>
-              ))}
-              <button type="button" disabled={safePage === totalPages} onClick={() => setCurrentPage(safePage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16}/></button>
-            </nav>
-          </div>
+        {!loading && loadError ? <div className="news-empty" role="alert"><AlertCircle size={28} /><strong>โหลดข่าวไม่สำเร็จ</strong><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองใหม่</button></div> : !loading && total > 0 ? (
+          <AdminTablePagination className="news-pagination" page={safePage} pageCount={totalPages} pageSize={pageSize} total={total} label="เปลี่ยนหน้ารายการข่าวและผลงาน" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
         ) : null}
       </section>
       {pendingAction?.action === "purge" ? <div className="modal-layer" onKeyDown={(event) => { if (event.key === "Escape") setPendingAction(null); }}>

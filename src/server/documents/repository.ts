@@ -3,7 +3,9 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { CategoryScope, DocumentStatus, Prisma, type Document } from "@prisma/client";
 import type { DemoDocument } from "@/features/documents/demo/model";
+import type { BlockConfigMap } from "@/features/pages/blocks/config/types";
 import { prisma } from "@/server/database/prisma";
+import { listPublicMediaItemsByIds } from "@/server/media/repository";
 
 export class DocumentInputError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -24,6 +26,14 @@ function dateLabel(value: Date | null): string | null {
   return value ? new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(value) : null;
 }
 
+const newDocumentWindowMs = 7 * 24 * 60 * 60 * 1000;
+
+function isNewDocument(publishedAt: Date | null, status: DocumentStatus): boolean {
+  if (status !== DocumentStatus.PUBLISHED || !publishedAt) return false;
+  const age = Date.now() - publishedAt.getTime();
+  return age >= 0 && age < newDocumentWindowMs;
+}
+
 function toDocumentDto(row: Document): DemoDocument {
   return {
     id: row.id,
@@ -40,9 +50,22 @@ function toDocumentDto(row: Document): DemoDocument {
     downloadCount: row.downloadCount,
     status: row.status === DocumentStatus.PUBLISHED ? "published" : row.status === DocumentStatus.ARCHIVED ? "archived" : "draft",
     publishedAt: dateLabel(row.publishedAt),
+    isNew: isNewDocument(row.publishedAt, row.status),
     deletedAt: dateLabel(row.deletedAt),
     updatedAt: dateLabel(row.updatedAt) ?? "",
   };
+}
+
+async function toPublicDocumentDtos(rows: Document[]): Promise<DemoDocument[]> {
+  const media = await listPublicMediaItemsByIds(rows.flatMap((row) => row.mediaId ? [row.mediaId] : []));
+  const byId = new Map(media.map((item) => [item.id, item]));
+  return rows.map((row) => ({ ...toDocumentDto(row), media: row.mediaId ? byId.get(row.mediaId) ?? null : null }));
+}
+
+export async function withResolvedDocumentMedia(document: DemoDocument): Promise<DemoDocument> {
+  const mediaId = document.mediaIds[0];
+  const media = mediaId ? await listPublicMediaItemsByIds([mediaId]) : [];
+  return { ...document, media: media[0] ?? null };
 }
 
 export async function listDocuments(includeDrafts: boolean): Promise<DemoDocument[]> {
@@ -50,7 +73,7 @@ export async function listDocuments(includeDrafts: boolean): Promise<DemoDocumen
     where: includeDrafts ? { deletedAt: null } : { status: DocumentStatus.PUBLISHED, deletedAt: null },
     orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
   });
-  return rows.map(toDocumentDto);
+  return toPublicDocumentDtos(rows);
 }
 
 export async function listDeletedDocuments(): Promise<DemoDocument[]> {
@@ -58,7 +81,7 @@ export async function listDeletedDocuments(): Promise<DemoDocument[]> {
     where: { deletedAt: { not: null } },
     orderBy: { deletedAt: "desc" },
   });
-  return rows.map(toDocumentDto);
+  return toPublicDocumentDtos(rows);
 }
 
 export type DocumentListQuery = {
@@ -96,11 +119,11 @@ export async function listDocumentPage(query: DocumentListQuery) {
   const page = Math.min(query.page, totalPages);
   const rows = await prisma.document.findMany({
     where,
-    orderBy: query.trash ? [{ deletedAt: "desc" }, { id: "asc" }] : [{ publishedAt: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * query.pageSize,
     take: query.pageSize,
   });
-  return { items: rows.map(toDocumentDto), page, pageSize: query.pageSize, total, years: years.map((item) => item.fiscalYear), counts: { active: activeTotal, published: publishedTotal, draft: draftTotal, trash: trashTotal } };
+  return { items: await toPublicDocumentDtos(rows), page, pageSize: query.pageSize, total, years: years.map((item) => item.fiscalYear), counts: { active: activeTotal, published: publishedTotal, draft: draftTotal, trash: trashTotal } };
 }
 
 export type PublicDocumentListQuery = {
@@ -145,16 +168,52 @@ export async function listPublicDocumentPage(query: PublicDocumentListQuery) {
     skip: (page - 1) * query.pageSize,
     take: query.pageSize,
   });
-  return { items: rows.map(toDocumentDto), page, pageSize: query.pageSize, total, years: yearOptions, selectedYear, categoryCounts: Object.fromEntries(categoryGroups.map((item) => [item.categoryId, item._count._all])) };
+  return { items: await toPublicDocumentDtos(rows), page, pageSize: query.pageSize, total, years: yearOptions, selectedYear, categoryCounts: Object.fromEntries(categoryGroups.map((item) => [item.categoryId, item._count._all])) };
 }
 
-export async function actOnDocument(id: string, action: "unpublish" | "delete" | "restore"): Promise<DemoDocument> {
+export async function listPublicDocumentBlockPage(query: {
+  page: number;
+  pageSize: number;
+  tab: Pick<BlockConfigMap["documents"]["tabs"][number], "source" | "categoryId" | "fiscalYear">;
+}) {
+  const { source, categoryId, fiscalYear } = query.tab;
+  const baseWhere: Prisma.DocumentWhereInput = {
+    status: DocumentStatus.PUBLISHED,
+    deletedAt: null,
+    ...(categoryId ? { categoryId } : {}),
+    ...(source.kind === "hospital" ? { unitId: "hospital" } : {}),
+    ...(source.kind === "unit" ? { unitId: source.unitId } : {}),
+    ...(source.kind === "selected" ? { id: { in: source.documentIds } } : {}),
+  };
+  const selectedYear = typeof fiscalYear === "number" ? fiscalYear : null;
+  const where: Prisma.DocumentWhereInput = {
+    ...baseWhere,
+    ...(selectedYear !== null ? { fiscalYear: selectedYear } : {}),
+  };
+  const total = await prisma.document.count({ where });
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+  const rows = await prisma.document.findMany({
+    where,
+    orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
+    skip: (page - 1) * query.pageSize,
+    take: query.pageSize,
+  });
+  return { items: await toPublicDocumentDtos(rows), page, pageSize: query.pageSize, total, selectedYear };
+}
+
+export async function actOnDocument(id: string, action: "unpublish" | "delete" | "restore" | "purge"): Promise<DemoDocument | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new DocumentInputError("รหัสเอกสารไม่ถูกต้อง");
   const existing = await prisma.document.findUnique({ where: { id } });
   if (!existing) throw new DocumentInputError("ไม่พบเอกสาร", 404);
   if (action === "restore") {
     if (!existing.deletedAt) throw new DocumentInputError("เอกสารไม่ได้อยู่ในถังขยะ", 409);
     return toDocumentDto(await prisma.document.update({ where: { id }, data: { deletedAt: null, status: DocumentStatus.DRAFT, publishedAt: null } }));
+  }
+  if (action === "purge") {
+    if (!existing.deletedAt) throw new DocumentInputError("เอกสารไม่ได้อยู่ในถังขยะ", 409);
+    const deleted = await prisma.document.deleteMany({ where: { id, deletedAt: { not: null } } });
+    if (!deleted.count) throw new DocumentInputError("ไม่พบเอกสารในถังขยะ", 404);
+    return null;
   }
   if (existing.deletedAt) throw new DocumentInputError("เอกสารอยู่ในถังขยะแล้ว", 409);
   if (action === "unpublish") {
@@ -189,7 +248,7 @@ export async function saveDocument(input: unknown): Promise<DemoDocument> {
   }
   const [category, unit] = await Promise.all([
     prisma.category.findFirst({ where: { id: categoryId, scope: CategoryScope.DOCUMENTS, active: true }, select: { id: true } }),
-    prisma.unit.findUnique({ where: { id: unitId }, select: { name: true } }),
+    prisma.unit.findFirst({ where: { id: unitId, deletedAt: null }, select: { name: true } }),
   ]);
   if (!category) throw new DocumentInputError("ไม่พบหมวดหมู่เอกสารที่เปิดใช้งาน");
   if (!unit) throw new DocumentInputError("ไม่พบเจ้าของเอกสาร");

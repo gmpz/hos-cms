@@ -6,28 +6,22 @@ import type { BlockConfigMap } from "../config/types";
 import { SecondaryRichText } from "./secondary-rich-text";
 import { MediaInteractionOverlay } from "./media-interaction-overlay";
 import {
-  getDemoMediaItem,
-  hydrateDemoMedia,
   mediaPreviewStyle,
   subscribeDemoMedia,
 } from "@/features/media/demo/media-registry";
-import { useInitialPublicMedia } from "@/features/media/public-media-context";
+import { displayMediaFor } from "@/features/media/resolved-media";
 
 export function BannerSlider({
   config,
-  showSlideCount = true,
   interactionDisabled = false,
 }: {
   config: BlockConfigMap["bannerSlider"];
-  showSlideCount?: boolean;
   interactionDisabled?: boolean;
 }) {
   const [position, setPosition] = useState(1);
   const [transitionEnabled, setTransitionEnabled] = useState(true);
   const moving = useRef(false);
   const resetFrame = useRef<number | null>(null);
-  const [mediaReady, setMediaReady] = useState(false);
-  const initialMedia = useInitialPublicMedia();
   const [, setMediaRevision] = useState(0);
   useEffect(() => {
     let mounted = true;
@@ -35,13 +29,6 @@ export function BannerSlider({
       if (mounted) setMediaRevision((value) => value + 1);
     };
     const unsubscribe = subscribeDemoMedia(refresh);
-    void hydrateDemoMedia()
-      .catch(() => undefined)
-      .then(() => {
-        if (!mounted) return;
-        setMediaReady(true);
-        refresh();
-      });
     return () => {
       mounted = false;
       unsubscribe();
@@ -50,13 +37,10 @@ export function BannerSlider({
   const activeSlides = config.mode === "single" ? config.slides.slice(0, 1) : config.slides;
   const resolvedSlides = activeSlides.map((slide) => ({
     slide,
-    media: mediaReady ? getDemoMediaItem(slide.imageId) ?? initialMedia?.get(slide.imageId ?? "") : initialMedia?.get(slide.imageId ?? ""),
+    media: displayMediaFor(slide, "imageId"),
   }));
   const slidesWithImages = resolvedSlides.filter((item) => item.media);
-  const displaySlides =
-    config.presentation === "imageOnly" && (mediaReady || initialMedia !== null)
-      ? slidesWithImages
-      : resolvedSlides;
+  const displaySlides = config.presentation === "imageOnly" ? slidesWithImages : resolvedSlides;
   const count = displaySlides.length;
   const safePosition = position > count + 1 ? 1 : position;
   const safeActive = count > 0 ? (safePosition - 1 + count) % count : 0;
@@ -99,14 +83,6 @@ export function BannerSlider({
       </div>
     );
   }
-  if (config.presentation === "imageOnly" && !mediaReady && initialMedia === null)
-    return (
-      <div
-        className={`banner-slider banner-height-${config.height} banner-presentation-${config.presentation}`}
-        aria-busy="true"
-        aria-label="กำลังโหลดแบนเนอร์"
-      />
-    );
   const trackSlides = count > 1
     ? [displaySlides[count - 1], ...displaySlides, displaySlides[0]]
     : displaySlides;
@@ -156,7 +132,7 @@ export function BannerSlider({
             aria-hidden={!visible}
             inert={!visible}
           >
-            <MediaInteractionOverlay interaction={slide.imageInteraction} mediaId={slide.imageId} label={slide.title || "แบนเนอร์"} disabled={interactionDisabled} />
+            <MediaInteractionOverlay interaction={slide.imageInteraction} media={media ?? null} label={slide.title || "แบนเนอร์"} disabled={interactionDisabled} />
             {config.presentation === "imageOnly" ? (
               <div className="banner-image-placeholder" aria-hidden="true">
                 {media ? null : <span>เลือกรูปภาพจากคลังสื่อ</span>}
@@ -169,7 +145,6 @@ export function BannerSlider({
                     <SecondaryRichText value={slide.description} />
                   ) : null}
                 </div>
-                {media ? null : <div className="banner-slide-art" aria-hidden="true"><span>+</span>{showSlideCount ? <small>{slideIndex + 1}/{count}</small> : null}</div>}
               </>
             )}
           </div>;
@@ -220,7 +195,6 @@ export function SingleBanner({
 }) {
   return (
     <BannerSlider
-      showSlideCount={false}
       interactionDisabled={interactionDisabled}
       config={{
         mode: "single",

@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { currentUser } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { deleteMediaFile, writeMediaFile } from "@/server/media/storage";
-import { createProfileMaster, createUser, deleteProfileMaster, moveProfileMaster, resetUserPassword, revokeUserSessions, setUserStatus, updateProfileMaster, updateUser } from "@/server/auth/users";
+import { createProfileMaster, createUser, deleteProfileMaster, deleteUser, moveProfileMaster, resetUserPassword, revokeUserSessions, setUserStatus, updateProfileMaster, updateUser } from "@/server/auth/users";
 import { isValidPhone, isValidPhoneExtension, phoneDigits } from "./phone";
 import { isValidPassword } from "@/features/auth/password-policy.mjs";
 
@@ -23,6 +23,7 @@ function messageFor(error: unknown): string {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "ชื่อผู้ใช้นี้มีอยู่แล้ว";
   if (error instanceof Error && error.message === "LAST_ACTIVE_ADMIN") return "ไม่สามารถปิดบัญชีหรือลดสิทธิ์ผู้ดูแลระบบคนสุดท้ายได้";
   if (error instanceof Error && error.message === "USER_NOT_FOUND") return "ไม่พบบัญชีผู้ใช้นี้";
+  if (error instanceof Error && error.message === "USER_LINKED_TO_UNIT") return "บัญชีนี้ยังเชื่อมกับบุคลากรหรือสิทธิ์ในหน่วยงาน กรุณานำออกจากหน่วยงานก่อนลบ";
   if (error instanceof Error && error.message === "SELF_ACTION") return "ไม่สามารถดำเนินการนี้กับบัญชีที่กำลังใช้งานอยู่";
   if (error instanceof Error && error.message === "UNAUTHORIZED") return "คุณไม่มีสิทธิ์ดำเนินการ";
   if (error instanceof Error && error.message === "INVALID_PASSWORD") return "รหัสผ่านไม่ครบตามเงื่อนไขที่กำหนด";
@@ -159,6 +160,16 @@ export async function setUserStatusAction(formData: FormData): Promise<UserActio
     await setUserStatus(id, status, actor.id);
     revalidatePath("/admin/users");
     return { ok: true, message: status === "DISABLED" ? "ปิดบัญชีและออกจากระบบทุกอุปกรณ์แล้ว" : "เปิดใช้งานบัญชีแล้ว" };
+  } catch (error) { return { ok: false, message: messageFor(error) }; }
+}
+export async function deleteUserAction(formData: FormData): Promise<UserActionResult> {
+  try {
+    const actor = await requireAdmin();
+    const id = String(formData.get("id") ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, message: "รหัสบัญชีผู้ใช้ไม่ถูกต้อง" };
+    await deleteUser(id, actor.id);
+    revalidatePath("/admin/users");
+    return { ok: true, message: "ลบบัญชีผู้ใช้ถาวรแล้ว" };
   } catch (error) { return { ok: false, message: messageFor(error) }; }
 }
 export async function resetPasswordAction(formData: FormData): Promise<UserActionResult> {

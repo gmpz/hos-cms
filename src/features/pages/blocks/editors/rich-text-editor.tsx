@@ -1,7 +1,7 @@
 "use client";
 
 import "./rich-text-editor.css";
-import { NativeSelect } from "@/components/ui/native-select";
+import { AnchoredSelect } from "@/components/ui/anchored-select";
 
 import type { Editor } from "@tiptap/core";
 import type { EditorStateSnapshot, JSONContent } from "@tiptap/react";
@@ -165,8 +165,9 @@ export function RichTextEditor({ value, onChange, compact = false }: { value: JS
     setLinkOpen(false);
   }
 
-  const linkModal = linkOpen && typeof document !== "undefined" ? createPortal(
-    <div className="modal-layer">
+  const modalRoot = typeof document !== "undefined" ? editor.view.dom.closest(".admin-shell") ?? document.body : null;
+  const linkModal = linkOpen && modalRoot ? createPortal(
+    <div className="modal-layer rich-text-link-layer">
       <button type="button" className="modal-backdrop" aria-label="ปิด" onClick={() => setLinkOpen(false)} />
       <form className="menu-editor rich-text-link-modal" role="dialog" aria-modal="true" aria-labelledby="rich-text-link-title" onSubmit={saveLink}>
         <header>
@@ -180,15 +181,21 @@ export function RichTextEditor({ value, onChange, compact = false }: { value: JS
             <button type="button" className={linkKind === "media" ? "active" : ""} onClick={() => { setLinkKind("media"); setLinkError(""); }}>ไฟล์ PDF</button>
           </div>
           {linkKind === "internal" ? (
-            <label>
-              หน้าปลายทาง
-              <NativeSelect autoFocus value={internalValue} onChange={(event) => setInternalValue(event.target.value)}>
-                {(["ส่วนหลักของเว็บไซต์", "หน้าเว็บไซต์", "หน่วยงานและกลุ่มงาน"] as const).map((group) => {
-                  const options = internalLinks.filter((option) => option.group === group);
-                  return options.length ? <optgroup key={group} label={group}>{options.map((option) => <option key={`${group}-${option.href}`} value={option.href}>{option.label} · {option.href}</option>)}</optgroup> : null;
-                })}
-              </NativeSelect>
-            </label>
+            <div className="rich-text-link-target">
+              <span>หน้าปลายทาง</span>
+              <AnchoredSelect
+                className="entity-target-select"
+                label="หน้าปลายทาง"
+                value={internalValue}
+                options={internalLinks.map((option) => ({
+                  value: option.href,
+                  label: option.label,
+                  description: option.href,
+                  group: option.group,
+                }))}
+                onChange={setInternalValue}
+              />
+            </div>
           ) : linkKind === "external" ? (
             <label>
               URL ภายนอก
@@ -213,14 +220,14 @@ export function RichTextEditor({ value, onChange, compact = false }: { value: JS
         </footer>
       </form>
     </div>,
-    editor.view.dom.closest(".admin-shell") ?? document.body,
+    modalRoot,
   ) : null;
 
   return <div className={`tiptap-editor tiptap-simple-editor${compact ? " is-compact" : ""}`}>
     <MenuBar editor={editor} linkOpen={linkOpen} onOpenLink={openLinkEditor} onOpenImage={() => setImagePickerOpen(true)} compact={compact} />
     <EditorContent editor={editor} />
     {linkModal}
-    {mediaPickerOpen ? (
+    {mediaPickerOpen && modalRoot ? createPortal(
       <MediaPicker
         open
         currentId={mediaId}
@@ -231,9 +238,10 @@ export function RichTextEditor({ value, onChange, compact = false }: { value: JS
           setLinkError("");
           setMediaPickerOpen(false);
         }}
-      />
+      />,
+      modalRoot,
     ) : null}
-    {imagePickerOpen ? (
+    {imagePickerOpen && modalRoot ? createPortal(
       <MediaPicker
         open
         currentId={null}
@@ -248,7 +256,8 @@ export function RichTextEditor({ value, onChange, compact = false }: { value: JS
           }).run();
           setImagePickerOpen(false);
         }}
-      />
+      />,
+      modalRoot,
     ) : null}
   </div>;
 }
@@ -343,11 +352,6 @@ function MenuBar({ editor, linkOpen, onOpenLink, onOpenImage, compact = false }:
     </ToolbarMenu>
     <Tool label="เพิ่มหรือแก้ไขลิงก์" active={state.isLink || linkOpen} onClick={onOpenLink}><Link2 /></Tool>
     <Tool label="นำลิงก์ออก" disabled={!state.isLink} onClick={() => editor.chain().focus().unsetLink().run()}><Unlink /></Tool>
-    <ToolbarMenu label="การจัดแนว" icon={alignIcon} align="right">
-      <MenuTool label="จัดชิดซ้าย" active={state.textAlign === "left"} onClick={() => editor.chain().focus().setTextAlign("left").run()}><AlignLeft /></MenuTool>
-      <MenuTool label="จัดกึ่งกลาง" active={state.textAlign === "center"} onClick={() => editor.chain().focus().setTextAlign("center").run()}><AlignCenter /></MenuTool>
-      <MenuTool label="จัดชิดขวา" active={state.textAlign === "right"} onClick={() => editor.chain().focus().setTextAlign("right").run()}><AlignRight /></MenuTool>
-    </ToolbarMenu>
   </div>;
   return <div className="tiptap-toolbar" role="toolbar" aria-label="เครื่องมือจัดรูปแบบข้อความ เลื่อนแนวนอนเพื่อดูเครื่องมือเพิ่มเติม" tabIndex={0} onScroll={(event) => {
     event.currentTarget.querySelectorAll<HTMLDetailsElement>(".tiptap-tool-menu[open]").forEach((details) => details.removeAttribute("open"));

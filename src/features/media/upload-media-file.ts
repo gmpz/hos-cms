@@ -63,27 +63,14 @@ export function uploadMediaFile(file: File, mediaId?: string, options: UploadOpt
   });
 }
 
-export async function fetchUploadedMediaItems() {
-  const response = await fetch("/api/media/upload", { cache: "no-store" });
-  const result: unknown = await response.json();
-  if (
-    !response.ok ||
-    typeof result !== "object" ||
-    result === null ||
-    !("items" in result) ||
-    !Array.isArray(result.items)
-  )
-    throw new Error("อ่านไฟล์จากโฟลเดอร์ uploads ไม่สำเร็จ");
-  return result.items as UploadedMediaItem[];
-}
-
 export async function fetchMediaLibraryPage(options: {
   page: number;
+  size: number;
   kind: "all" | "image" | "document";
   search: string;
   signal?: AbortSignal;
 }): Promise<MediaLibraryPage> {
-  const params = new URLSearchParams({ library: "1", page: String(options.page), kind: options.kind, search: options.search });
+  const params = new URLSearchParams({ library: "1", page: String(options.page), size: String(options.size), kind: options.kind, search: options.search });
   const response = await fetch(`/api/media/upload?${params}`, { cache: "no-store", signal: options.signal });
   const result: unknown = await response.json();
   if (!response.ok || typeof result !== "object" || result === null || !("items" in result) || !Array.isArray(result.items) ||
@@ -107,14 +94,5 @@ export async function fetchMediaPickerPage(options: {
     !("nextCursor" in result) || (result.nextCursor !== null && typeof result.nextCursor !== "string"))
     throw new Error("โหลดไฟล์จากคลังสื่อไม่สำเร็จ");
   return result as { items: UploadedMediaItem[]; nextCursor: string | null };
-}
-
-export async function fetchMediaItemsByIds(ids: string[]): Promise<UploadedMediaItem[]> {
-  const params = new URLSearchParams({ ids: ids.join(",") });
-  const response = await fetch(`/api/media/upload?${params}`, { cache: "no-store" });
-  const result: unknown = await response.json();
-  if (!response.ok || typeof result !== "object" || result === null || !("items" in result) || !Array.isArray(result.items))
-    throw new Error("โหลดข้อมูลไฟล์ไม่สำเร็จ");
-  return result.items as UploadedMediaItem[];
 }
 

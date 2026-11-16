@@ -3,7 +3,8 @@
 import { Move, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { getDemoMediaItem, mediaPreviewStyle } from "@/features/media/demo/media-registry";
+import { mediaPreviewStyle } from "@/features/media/demo/media-registry";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import type { BlockConfigMap } from "../config/types";
 
 type ImageConfig = BlockConfigMap["image"];
@@ -12,7 +13,7 @@ const clamp = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
 const previewRatio: Record<ImageConfig["aspectRatio"], string> = { original: "16 / 9", "16:9": "16 / 9", "4:3": "4 / 3", "1:1": "1", "4:5": "4 / 5", a4: "210 / 297" };
 
 export function ImageDisplaySettings({ config, onChange, cropOnly = false }: { config: ImageConfig; onChange: (change: Partial<ImageConfig>) => void; cropOnly?: boolean }) {
-  const media = getDemoMediaItem(config.mediaId);
+  const media = displayMediaFor(config);
   const imageUrl = media?.previewUrl ?? null;
   const drag = useRef<DragStart | null>(null);
   const [imageSize, setImageSize] = useState<{ url: string; width: number; height: number } | null>(null);

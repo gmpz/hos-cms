@@ -5,8 +5,6 @@ import {
   Calendar,
   Check,
   CircleAlert,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   ExternalLink,
   FileText,
@@ -30,6 +28,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import { ActionToast } from "@/components/admin/action-toast";
+import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DocumentFileIcon } from "./document-file-icon";
 import type { DemoMediaItem } from "../demo/media-items";
@@ -54,29 +53,23 @@ type UploadTask = {
   percent: number | null;
   error: string | null;
   retryable: boolean;
+  retrying?: boolean;
   controller: AbortController | null;
 };
 type MediaListEntry = { type: "upload"; task: UploadTask } | { type: "media"; item: DemoMediaItem };
-const pageSize = 20;
 const maxConcurrentUploads = 3;
 const maxUploadBytes = 25 * 1024 * 1024;
 const supportedUploadTypes = new Set([
   "image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf", "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation", "video/mp4",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
 function uploadValidationError(file: File): string | null {
   if (file.size === 0) return "ไฟล์ว่าง ไม่สามารถอัปโหลดได้";
   if (file.size > maxUploadBytes) return "ไฟล์ต้องมีขนาดไม่เกิน 25 MB";
   if (!supportedUploadTypes.has(file.type)) return "ไม่รองรับประเภทไฟล์นี้";
   return null;
-}
-function paginationItems(current: number, total: number) {
-  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
-  return [...new Set([1, total, current - 1, current, current + 1])]
-    .filter((page) => page > 0 && page <= total)
-    .sort((left, right) => left - right);
 }
 
 export function MediaLibrary() {
@@ -93,6 +86,7 @@ export function MediaLibrary() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [deleteCandidate, setDeleteCandidate] = useState<DemoMediaItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [blockedDelete, setBlockedDelete] = useState<{ message: string; usages: MediaUsage[] } | null>(null);
@@ -103,7 +97,7 @@ export function MediaLibrary() {
   const nextUploadIdRef = useRef(0);
   const dragDepthRef = useRef(0);
   const selected = items.find((item) => item.id === selectedId) ?? null;
-  const queryKey = JSON.stringify([filter, debouncedSearch, currentPage]);
+  const queryKey = JSON.stringify([filter, debouncedSearch, currentPage, pageSize]);
   const requestKey = JSON.stringify([queryKey, refreshKey]);
   const loading = loadedKey !== queryKey;
   const totals = summary;
@@ -114,8 +108,7 @@ export function MediaLibrary() {
   const displayEntries = loading ? entries.filter((entry) => entry.type === "upload") : entries;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const pageStart = (safePage - 1) * pageSize;
-  const pageNumbers = paginationItems(safePage, totalPages);
+
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setDebouncedSearch(search.trim()); setCurrentPage(1); }, 250);
@@ -124,7 +117,7 @@ export function MediaLibrary() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchMediaLibraryPage({ page: currentPage, kind: filter, search: debouncedSearch, signal: controller.signal })
+    void fetchMediaLibraryPage({ page: currentPage, size: pageSize, kind: filter, search: debouncedSearch, signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
         const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
@@ -141,7 +134,7 @@ export function MediaLibrary() {
         setLoadedKey(queryKey);
       });
     return () => controller.abort();
-  }, [currentPage, filter, debouncedSearch, refreshKey, requestKey, queryKey]);
+  }, [currentPage, pageSize, filter, debouncedSearch, refreshKey, requestKey, queryKey]);
 
   useEffect(() => {
     const refresh = () => setRefreshKey((value) => value + 1);
@@ -250,6 +243,7 @@ export function MediaLibrary() {
     const task = uploadTasksRef.current.find((entry) => entry.id === id);
     if (!task || task.controller || !task.retryable || (task.status !== "error" && task.status !== "canceled")) return;
     task.status = "queued";
+    task.retrying = true;
     task.percent = 0;
     task.error = null;
     publishUploadTasks();
@@ -322,7 +316,7 @@ export function MediaLibrary() {
         className="media-file-input"
         type="file"
         multiple
-        accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp4"
+        accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
         onChange={(event) => {
           if (event.target.files) addFiles(event.target.files);
           event.target.value = "";
@@ -338,7 +332,7 @@ export function MediaLibrary() {
       >
         <Upload size={29} />
         <strong>{dragging ? "วางไฟล์เพื่ออัปโหลด" : "ลากไฟล์มาวาง หรือคลิกเพื่อเลือกไฟล์"}</strong>
-        <span>รองรับ JPG, PNG, WebP, GIF, PDF, Office และ MP4 · สูงสุด 25 MB ต่อไฟล์</span>
+        <span>รองรับ JPG/JPEG, PNG, WebP, GIF, PDF และไฟล์ Office (DOC, DOCX, XLS, XLSX, PPT, PPTX) · สูงสุด 25 MB ต่อไฟล์</span>
       </button>
       <section className="media-storage-summary" aria-label="สรุปขนาดไฟล์ในคลังสื่อ">
         <div className="media-storage-card">
@@ -422,7 +416,7 @@ export function MediaLibrary() {
           )}
         </div>
       ) : (
-        <div className="media-table-wrap">
+        <div className="media-table-wrap admin-data-table admin-data-table-scroll">
           <table>
             <thead>
               <tr>
@@ -431,7 +425,7 @@ export function MediaLibrary() {
                 <th>มิติ</th>
                 <th>วันที่</th>
                 <th>อัปโหลดโดย</th>
-                <th>จัดการ</th>
+                <th className="admin-table-actions-heading">จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -443,7 +437,7 @@ export function MediaLibrary() {
                   <td>{entry.item.dimensions}</td>
                   <td>{entry.item.uploadedAt}</td>
                   <td>{entry.item.uploadedBy}</td>
-                  <td/>
+                  <td><div className="admin-table-actions"><button type="button" aria-label={`ดูและแก้ไข ${entry.item.name}`} title="ดูและแก้ไขไฟล์" onClick={(event) => { event.stopPropagation(); setSelectedId(entry.item.id); }}><Pencil size={16}/></button></div></td>
                 </tr>
               )}
             </tbody>
@@ -451,46 +445,7 @@ export function MediaLibrary() {
         </div>
       )}
       {!loading && !loadError && total > 0 ? (
-        <div className="pages-pagination media-pagination">
-          <p>
-            แสดง {pageStart + 1}–
-            {Math.min(pageStart + items.length, total)} จาก{" "}
-            {total} รายการ
-          </p>
-          <nav aria-label="เปลี่ยนหน้าคลังสื่อ">
-            <button
-              type="button"
-              disabled={safePage === 1}
-              onClick={() => setCurrentPage(safePage - 1)}
-              aria-label="หน้าก่อนหน้า"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            {pageNumbers.map((page, index) => (
-              <span key={page}>
-                {index > 0 && page - pageNumbers[index - 1] > 1 ? (
-                  <i>…</i>
-                ) : null}
-                <button
-                  type="button"
-                  className={page === safePage ? "active" : ""}
-                  aria-current={page === safePage ? "page" : undefined}
-                  onClick={() => setCurrentPage(page)}
-                >
-                  {page}
-                </button>
-              </span>
-            ))}
-            <button
-              type="button"
-              disabled={safePage === totalPages}
-              onClick={() => setCurrentPage(safePage + 1)}
-              aria-label="หน้าถัดไป"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </nav>
-        </div>
+        <AdminTablePagination className="media-pagination" page={safePage} pageCount={totalPages} pageSize={pageSize} total={total} label="เปลี่ยนหน้าคลังสื่อ" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
       ) : null}
       {selected ? (
         <MediaDrawer
@@ -530,35 +485,40 @@ function MediaUploadStatus({ task }: { task: UploadTask }) {
   </div>;
 }
 
-function MediaUploadActions({ task, onCancel, onRetry, onDismiss }: MediaUploadProps) {
-  return <div className="media-upload-actions">
+function MediaUploadActions({ task, onCancel, onRetry, onDismiss, table = false }: MediaUploadProps & { table?: boolean }) {
+  return <div className={table ? "admin-table-actions media-upload-actions" : "media-upload-actions"}>
     {(task.status === "queued" || task.status === "uploading") ?
       <button type="button" onClick={() => onCancel(task.id)} aria-label={`ยกเลิก ${task.file.name}`} title="ยกเลิก"><X size={17}/></button> : null}
     {(task.status === "error" || task.status === "canceled") && task.retryable && !task.controller ?
       <button type="button" onClick={() => onRetry(task.id)} aria-label={`ลองอัปโหลด ${task.file.name} อีกครั้ง`} title="ลองใหม่"><RotateCcw size={16}/></button> : null}
     {(task.status === "error" || task.status === "canceled") && !task.controller ?
-      <button type="button" onClick={() => onDismiss(task.id)} aria-label={`นำ ${task.file.name} ออกจากรายการ`} title="นำออกจากรายการ"><X size={17}/></button> : null}
+      <button type="button" className={table ? "media-upload-table-dismiss" : undefined} onClick={() => onDismiss(task.id)} aria-label={`นำ ${task.file.name} ออกจากรายการ`} title="นำออกจากรายการ"><X size={17}/></button> : null}
   </div>;
 }
 
 function MediaUploadCard(props: MediaUploadProps) {
   const { task } = props;
   const active = task.status === "uploading" || task.status === "saving";
+  const failed = task.status === "error";
+  const loadingView = active || (task.retrying && task.status === "queued");
   return <div className={`media-card media-upload-card ${task.status}`}>
-    <div className="media-preview media-upload-preview" aria-hidden="true">
-      {task.status === "error" ? <CircleAlert size={31}/> : active ? <LoaderCircle size={31}/> : task.file.type.startsWith("image/") ? <ImageIcon size={31}/> : <FileText size={31}/>}
+    <div className={`media-preview media-upload-preview${failed ? " failed" : ""}`}>
+      {loadingView ? <div className="media-upload-retry-progress" role="status"><LoaderCircle size={31}/><span>กำลังอัปโหลด</span></div> : failed ? <><div className="media-upload-error-visual"><CircleAlert size={31} aria-hidden="true"/><span>{task.error ?? "อัปโหลดไม่สำเร็จ"}</span></div><div className="media-upload-error-actions">{task.retryable && !task.controller ? <button type="button" className="media-upload-retry" onClick={() => props.onRetry(task.id)} aria-label={`ลองอัปโหลด ${task.file.name} อีกครั้ง`} title="ลองใหม่"><RotateCcw size={24}/></button> : null}<button type="button" onClick={() => props.onDismiss(task.id)} aria-label={`นำ ${task.file.name} ออกจากรายการ`} title="นำออกจากรายการ"><X size={26}/></button></div></> :
+        active ? <LoaderCircle size={31}/> : task.file.type.startsWith("image/") ? <ImageIcon size={31}/> : <FileText size={31}/>}
     </div>
-    <div className="media-upload-card-details">
+    {loadingView ? <div className="media-upload-card-details media-upload-card-details-placeholder" aria-hidden="true"/> : <div className="media-upload-card-details">
       <strong title={task.file.name}>{task.file.name}</strong>
       <small>{formatBytes(task.file.size)}</small>
-      <MediaUploadStatus task={task}/>
-      <MediaUploadActions {...props}/>
-    </div>
+      {failed ? null : <><MediaUploadStatus task={task}/>{active ? null : <MediaUploadActions {...props}/>}</>}
+    </div>}
   </div>;
 }
 
 function MediaUploadRow(props: MediaUploadProps) {
   const { task } = props;
+  if (task.status === "uploading" || task.status === "saving" || (task.retrying && task.status === "queued")) {
+    return <tr className="media-upload-row media-upload-row-retrying"><td colSpan={6}><div className="media-upload-row-retry-progress" role="status"><span>กำลังอัปโหลด</span><div className="media-upload-progress indeterminate" aria-hidden="true"><span/></div></div></td></tr>;
+  }
   return <tr className={`media-upload-row ${task.status}`}>
     <td><div className="media-file-name">
       <div className="media-preview media-upload-row-preview" aria-hidden="true">{task.file.type.startsWith("image/") ? <ImageIcon size={21}/> : <FileText size={21}/>}</div>
@@ -568,7 +528,7 @@ function MediaUploadRow(props: MediaUploadProps) {
     <td>—</td>
     <td>—</td>
     <td>—</td>
-    <td><MediaUploadActions {...props}/></td>
+    <td><MediaUploadActions {...props} table/></td>
   </tr>;
 }
 

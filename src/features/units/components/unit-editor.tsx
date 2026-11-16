@@ -1,21 +1,20 @@
 "use client";
+
+import { createId } from "@/utils/create-id";
 import type { JSONContent } from "@tiptap/react";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
   ArrowRight,
   ArrowLeft,
   Building2,
-  CircleAlert,
-  CircleCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  FilePenLine,
   GripVertical,
   Image as ImageIcon,
-  Minus,
   PenLine,
   Plus,
+  RotateCcw,
   Save,
   Search,
   Send,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import { AdminContentLoading } from "@/components/admin/admin-content-loading";
+import { PublishDropdown } from "@/components/admin/publish-dropdown";
 import {
   DragDropContext,
   Draggable,
@@ -36,9 +36,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MediaPicker } from "@/features/media/components/media-picker";
-import { useMediaRevision } from "@/features/media/use-media-revision";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import {
-  getDemoMediaItem,
   mediaPreviewStyle,
 } from "@/features/media/demo/media-registry";
 import {
@@ -46,7 +45,6 @@ import {
   unitServiceIconName,
   unitSectionLabels,
   type DemoUnit,
-  type UnitChangeGroup,
   type UnitServiceGroup,
 } from "../demo/model";
 import { discardUnitDraft, readUnits, refreshUnits, saveUnit } from "../demo/storage";
@@ -83,7 +81,6 @@ type PersonnelProfileOption = { id: string; name: string; position: string; phon
 type PersonnelProfileOptions = { positions: string[]; levels: string[] };
 
 export function UnitEditor({ unitId }: { unitId: string | null }) {
-  useMediaRevision();
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     () => true,
@@ -108,6 +105,8 @@ export function UnitEditor({ unitId }: { unitId: string | null }) {
   const [confirmAction, setConfirmAction] = useState<
     "draft" | "publish" | null
   >(null);
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  const [unpublishPending, setUnpublishPending] = useState(false);
   const [deleteService, setDeleteService] = useState<
     | { kind: "group"; groupId: string; label: string }
     | { kind: "link"; groupId: string; linkId: string; label: string }
@@ -123,25 +122,24 @@ export function UnitEditor({ unitId }: { unitId: string | null }) {
   >("general");
   const [accessOptions, setAccessOptions] = useState<AccessOptions>({ units: [], users: [] });
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
-  const [accessDirty, setAccessDirty] = useState(false);
-  const hasUnsavedChanges = unitDraftSnapshot(unit) !== savedSnapshot || accessDirty;
+  const hasUnsavedChanges = unitDraftSnapshot(unit) !== savedSnapshot;
+  const savedUnit = JSON.parse(savedSnapshot) as DemoUnit;
   const badgeUnit = JSON.parse(unit.publishedSlug ? publishedSnapshot ?? savedSnapshot : unitDraftSnapshot(createUnit(unit.id))) as DemoUnit;
   const changed = (current: unknown, saved: unknown) => JSON.stringify(current) !== JSON.stringify(saved);
+  const accessValues = [unit.accessLevel, unit.accessGrants];
+  const accessUnsaved = changed(accessValues, [savedUnit.accessLevel, savedUnit.accessGrants]);
+  const accessUnpublished = changed(accessValues, [badgeUnit.accessLevel, badgeUnit.accessGrants]);
+  const accessNotice = accessUnsaved ? "unsaved" : accessUnpublished ? "draft" : undefined;
   const tabDirty = {
-general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.contact, unit.coverMediaId, unit.coverFocus, unit.about, unit.accessLevel, unit.accessGrants], [badgeUnit.name, badgeUnit.shortName, badgeUnit.slug, badgeUnit.summary, badgeUnit.contact, badgeUnit.coverMediaId, badgeUnit.coverFocus, badgeUnit.about, badgeUnit.accessLevel, badgeUnit.accessGrants]) || accessDirty,
+    general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.contact, unit.coverMediaId, unit.coverFocus, unit.about, unit.accessLevel, unit.accessGrants], [badgeUnit.name, badgeUnit.shortName, badgeUnit.slug, badgeUnit.summary, badgeUnit.contact, badgeUnit.coverMediaId, badgeUnit.coverFocus, badgeUnit.about, badgeUnit.accessLevel, badgeUnit.accessGrants]),
     content: changed([unit.vision, unit.visionStatement, unit.mission, unit.missionItems], [badgeUnit.vision, badgeUnit.visionStatement, badgeUnit.mission, badgeUnit.missionItems]),
     services: changed(unit.services, badgeUnit.services),
     personnel: changed(unit.personnel, badgeUnit.personnel),
     layout: changed([unit.sectionOrder, unit.sectionVisibility, unit.sectionBackground], [badgeUnit.sectionOrder, badgeUnit.sectionVisibility, badgeUnit.sectionBackground]),
   };
-  const saveStatus = hasUnsavedChanges || !unitId ? "unsaved" : unit.status === "draft" || unit.hasUnpublishedChanges ? "draft" : "published";
-  const saveStatusLabel = saveStatus === "unsaved"
-    ? !unitId && !hasUnsavedChanges ? "หน่วยงานนี้ยังไม่ได้บันทึก" : "มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก"
-    : saveStatus === "draft"
-      ? unit.status === "published" ? "บันทึกการเปลี่ยนแปลงแล้ว รอเผยแพร่ หน้าเว็บไซต์ยังแสดงเวอร์ชันเดิม" : "บันทึกเป็นฉบับร่างแล้ว ยังไม่แสดงบนเว็บไซต์"
-      : "เผยแพร่เวอร์ชันล่าสุดแล้ว";
+  const hasSavedDraft = Boolean(unitId) && (unit.status === "draft" || Boolean(unit.hasUnpublishedChanges));
   const shouldWarnOnLeave = hydrated && unitLoaded && (hasUnsavedChanges || !unitId);
-  const coverMedia = getDemoMediaItem(unit.coverMediaId);
+  const coverMedia = displayMediaFor(unit, "coverMediaId");
   useEffect(() => {
     if (!shouldWarnOnLeave) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -168,8 +166,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       document.removeEventListener("click", interceptLink, true);
     };
   }, [shouldWarnOnLeave]);
-  const [savedChanges, setSavedChanges] = useState<UnitChangeGroup[] | null>(null);
-  const [changesOpen, setChangesOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [discardPending, setDiscardPending] = useState(false);
   const [personnelProfiles, setPersonnelProfiles] = useState<PersonnelProfileOption[]>([]);
@@ -216,9 +212,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       setUnitLoaded(!unitId);
       setPersonPickerId(null);
       setConfirmAction(null);
-      setChangesOpen(false);
       setDiscardConfirmOpen(false);
-      setAccessDirty(false);
       setSelectedServiceGroupId(null);
       setExpandedServiceLinkId(null);
       setSelectedPersonId(null);
@@ -237,7 +231,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
         setUnit(saved);
         setSavedSnapshot(unitDraftSnapshot(saved));
         setUnitLoaded(true);
-        setAccessDirty(false);
         setSelectedPersonId(null);
       }
     }).catch(() => undefined);
@@ -250,15 +243,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       .then(async (response) => response.ok ? await response.json() as DemoUnit : null)
       .then((published) => { if (active) setPublishedSnapshot(published ? unitDraftSnapshot(published) : null); })
       .catch(() => { if (active) setPublishedSnapshot(null); });
-    return () => { active = false; };
-  }, [unitId]);
-  useEffect(() => {
-    if (!unitId) return;
-    let active = true;
-    void fetch(`/api/units/${unitId}/changes`, { cache: "no-store" })
-      .then(async (response) => response.ok ? await response.json() as UnitChangeGroup[] : null)
-      .then((changes) => { if (active) setSavedChanges(changes); })
-      .catch(() => { if (active) setSavedChanges(null); });
     return () => { active = false; };
   }, [unitId]);
   useEffect(() => {
@@ -312,7 +296,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       setToast({ title: "บันทึกไม่สำเร็จ", description: "ไม่พบกลุ่มงานในฐานข้อมูล กรุณาโหลดหน้านี้ใหม่", variant: "error" });
       return;
     }
-    const id = unitId ? unit.id : crypto.randomUUID();
+    const id = unitId ? unit.id : createId();
     const next = {
       ...unit,
       id,
@@ -327,11 +311,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       setSavedSnapshot(unitDraftSnapshot(saved));
       if (publish) setPublishedSnapshot(unitDraftSnapshot(saved));
       if (!unitId) allowLeaveRef.current = true;
-      if (publish) setSavedChanges([]);
-      else void fetch(`/api/units/${id}/changes`, { cache: "no-store" })
-        .then(async (response) => response.ok ? await response.json() as UnitChangeGroup[] : null)
-        .then(setSavedChanges).catch(() => setSavedChanges(null));
-      setAccessDirty(false);
       setToast({
         title: publish ? "เผยแพร่กลุ่มงานแล้ว" : "บันทึกร่างแล้ว",
         description: publish
@@ -355,9 +334,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       const restored = await discardUnitDraft(unitId);
       setUnit(restored);
       setSavedSnapshot(unitDraftSnapshot(restored));
-      setSavedChanges([]);
-      setAccessDirty(false);
-      setChangesOpen(false);
       setDiscardConfirmOpen(false);
       setToast({ title: "ยกเลิกฉบับร่างแล้ว", description: "ข้อมูลในฟอร์มกลับเป็นฉบับเผยแพร่ล่าสุด หน้าเว็บไซต์ไม่เปลี่ยนแปลง", variant: "success" });
     } catch (error) {
@@ -365,6 +341,23 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
     } finally {
       setDiscardPending(false);
     }
+  }
+  async function unpublish() {
+    if (!unitId || unpublishPending || unit.status !== "published") return;
+    setUnpublishPending(true);
+    try {
+      const response = await fetch(`/api/units/${unitId}/unpublish`, { method: "POST" });
+      const result = await response.json() as DemoUnit | { error: string };
+      if (!response.ok || !("id" in result)) throw new Error("error" in result ? result.error : "ยกเลิกเผยแพร่ไม่สำเร็จ");
+      setUnit(result);
+      setSavedSnapshot(unitDraftSnapshot(result));
+      setPublishedSnapshot(null);
+      setConfirmUnpublish(false);
+      void refreshUnits(true).catch(() => undefined);
+      setToast({ title: "ยกเลิกเผยแพร่แล้ว", description: `“${result.name}” ไม่แสดงบนเว็บไซต์แล้ว`, variant: "success" });
+    } catch (error) {
+      setToast({ title: "ยกเลิกเผยแพร่ไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
+    } finally { setUnpublishPending(false); }
   }
   function reorderSections(result: DropResult) {
     if (!result.destination || result.destination.index === result.source.index)
@@ -427,30 +420,26 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
           </Link>
           <h1>{unitId ? "แก้ไขกลุ่มงาน" : "สร้างกลุ่มงาน"}</h1>
           <p>{unit.name || "กำหนดข้อมูลและหน้าเว็บไซต์ของกลุ่มงาน"}</p>
-          {unitLoaded ? <p className={`unit-editor-save-status is-${saveStatus}`} role="status">
-            {saveStatus === "unsaved" ? <CircleAlert size={15} aria-hidden="true"/> : saveStatus === "draft" ? <FilePenLine size={15} aria-hidden="true"/> : <CircleCheck size={15} aria-hidden="true"/>}
-            {saveStatusLabel}
-          </p> : null}
         </div>
         <div>
           <button disabled={!hasUnsavedChanges && Boolean(unitId)} onClick={() => setConfirmAction("draft")}>
             <Save size={15} />
             บันทึกร่าง
           </button>
-          <AccessControlButton level={unit.accessLevel} onClick={() => setAccessDialogOpen(true)}/>
-          <button
-            className="primary-button"
-            onClick={() => setConfirmAction("publish")}
-          >
-            <Send size={15} />
-            เผยแพร่
-          </button>
+          <AccessControlButton level={unit.accessLevel} notice={accessNotice} onClick={() => setAccessDialogOpen(true)}/>
+          <div className="admin-publish-split">
+            <button className="primary-button" disabled={unpublishPending || (unit.status === "published" && !hasUnsavedChanges && !unit.hasUnpublishedChanges)} onClick={() => setConfirmAction("publish")}><Send size={15} />เผยแพร่</button>
+            {unitId && unit.status === "published" ? <PublishDropdown disabled={unpublishPending} onUnpublish={() => setConfirmUnpublish(true)}/> : null}
+          </div>
         </div>
       </header>
-      <section className={`unit-publication-status${unit.hasUnpublishedChanges ? " has-draft" : ""}`} aria-live="polite">
-        <div className="unit-publication-message"><strong>{unit.status === "published" ? unit.hasUnpublishedChanges ? `มีร่างที่ยังไม่เผยแพร่${savedChanges?.length ? ` · แก้ไข ${savedChanges.length} ส่วน` : ""}` : "เผยแพร่แล้ว · ไม่มีร่างค้าง" : unitId ? "บันทึกร่างแล้ว · ยังไม่เผยแพร่" : "ยังไม่บันทึกหรือเผยแพร่"}</strong><small>{unit.status === "published" ? unit.hasUnpublishedChanges ? "หน้าเว็บไซต์ยังแสดงฉบับเผยแพร่ล่าสุด" : "หน้าเว็บไซต์แสดงข้อมูลฉบับล่าสุด" : "หน้าเว็บไซต์ยังไม่แสดงกลุ่มงานนี้"}</small></div>
-        {unit.hasUnpublishedChanges ? <div className="unit-publication-actions">{savedChanges?.length ? <button type="button" className="unit-changes-trigger" onClick={() => setChangesOpen(true)}>ดูรายการเปลี่ยนแปลง</button> : null}<button type="button" className="unit-discard-trigger" onClick={() => setDiscardConfirmOpen(true)}>ทิ้งฉบับร่าง</button></div> : null}
-      </section>
+      {unitLoaded && (hasUnsavedChanges || !unitId || hasSavedDraft) ? <section className="splash-draft-notice" aria-live="polite">
+        <div>
+          <strong>{hasUnsavedChanges ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : !unitId ? "กลุ่มงานนี้ยังไม่ได้บันทึก" : unit.hasUnpublishedChanges ? "มีร่างที่บันทึกแล้ว ยังไม่ได้เผยแพร่" : "บันทึกร่างแล้ว ยังไม่ได้เผยแพร่"}</strong>
+          {hasSavedDraft ? <p>บันทึกล่าสุด {unit.updatedAt} · {unit.status === "published" ? "หน้าเว็บไซต์ยังแสดงฉบับเดิม" : "กลุ่มงานนี้ยังไม่แสดงบนเว็บไซต์"}</p> : null}
+        </div>
+        {unit.status === "published" && unit.hasUnpublishedChanges ? <button type="button" disabled={discardPending} onClick={() => setDiscardConfirmOpen(true)}><RotateCcw size={16}/>ยกเลิกร่างที่บันทึก</button> : null}
+      </section> : null}
       <div className="unit-tabs-shell" data-overflow={tabOverflow.left || tabOverflow.right}>
       <button type="button" className="unit-tabs-arrow" aria-label="เลื่อนแท็บไปทางซ้าย" disabled={!tabOverflow.left} onClick={() => tabsRef.current?.scrollBy({ left: -240, behavior: "smooth" })}><ChevronLeft size={18}/></button>
       <nav ref={tabsRef} className="unit-tabs" aria-label="ส่วนข้อมูลกลุ่มงาน">
@@ -466,9 +455,10 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
           <button
             key={value}
             className={tab === value ? "active" : ""}
+            aria-label={tabDirty[value] ? `${label} มีการเปลี่ยนแปลงที่ยังไม่เผยแพร่` : label}
             onClick={(event) => { setTab(value); event.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }}
           >
-            {label}{unitLoaded && tabDirty[value] ? <span className="unit-unsaved-badge" aria-label="มีการเปลี่ยนแปลงที่ยังไม่เผยแพร่" title="มีการเปลี่ยนแปลงที่ยังไม่เผยแพร่">!</span> : null}
+            {label}{tabDirty[value] ? <span className="unit-tab-dirty-badge" aria-hidden="true">!</span> : null}
           </button>
         ))}
       </nav>
@@ -512,7 +502,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
             </div>
             <section className="unit-general-panel unit-general-cover-panel" aria-labelledby="unit-general-cover-title">
               <div className="unit-general-panel-heading">
-                <h2 id="unit-general-cover-title">รูปการ์ดหน่วยงาน</h2>
+                <h2 id="unit-general-cover-title">รูปการ์ดหน่วยงาน <UnsavedBadge show={changed([unit.coverMediaId, unit.coverFocus], [badgeUnit.coverMediaId, badgeUnit.coverFocus])}/></h2>
                 <p>ตัวอย่างนี้แสดงสัดส่วนเดียวกับการ์ดในหน้ารวมหน่วยงาน</p>
               </div>
               {coverMedia ? <>
@@ -567,17 +557,15 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
             <header className="unit-content-form-intro"><h2>เนื้อหากลุ่มงาน</h2><p>กรอกวิสัยทัศน์และพันธกิจที่จะแสดงบนหน้ากลุ่มงาน</p></header>
             <div className="unit-content-form-panels">
             <section className="unit-content-form-section unit-content-vision-section">
-              <div className="unit-content-form-heading"><div><h2>วิสัยทัศน์</h2></div></div>
+              <div className="unit-content-form-heading"><div><h2>วิสัยทัศน์ <UnsavedBadge show={unit.visionStatement === undefined ? changed(unit.vision, badgeUnit.vision) : changed(unit.visionStatement, badgeUnit.visionStatement)}/></h2></div></div>
               <div className="unit-content-vision-fields">
               {unit.visionStatement === undefined ? <>
                 <p className="unit-content-legacy-note">ข้อมูลเดิมยังแสดงบนเว็บไซต์ตามเดิม แก้ไขเป็นข้อความธรรมดาได้ หรือย้ายเข้าช่องวิสัยทัศน์ใหม่เมื่อข้อความไม่เกิน 220 ตัวอักษร</p>
-                <label className="unit-content-plain-label" htmlFor="unit-vision-legacy">ข้อความวิสัยทัศน์เดิม<UnsavedBadge show={changed(unit.vision, badgeUnit.vision)}/></label>
-                <textarea id="unit-vision-legacy" className="unit-content-vision-input" value={plainTextFromLegacyContent(unit.vision)} rows={5} onChange={(event) => patch({ vision: legacyContentFromPlainText(event.target.value) })} />
+                <textarea id="unit-vision-legacy" aria-label="วิสัยทัศน์เดิม" className="unit-content-vision-input" value={plainTextFromLegacyContent(unit.vision)} rows={5} onChange={(event) => patch({ vision: legacyContentFromPlainText(event.target.value) })} />
                 <button type="button" className="unit-content-convert" disabled={plainTextFromLegacyContent(unit.vision).trim().length > 220} onClick={() => patch({ visionStatement: plainTextFromLegacyContent(unit.vision).trim() })}>ใช้ข้อความนี้ในรูปแบบใหม่</button>
               </> : <>
-                <label className="unit-content-plain-label" htmlFor="unit-vision-statement">ข้อความวิสัยทัศน์ <UnsavedBadge show={changed(unit.visionStatement, badgeUnit.visionStatement)}/><small>แนะนำ 80–160 ตัวอักษร</small></label>
-                <textarea id="unit-vision-statement" className="unit-content-vision-input" value={unit.visionStatement} maxLength={220} rows={3} placeholder="เช่น มุ่งพัฒนาระบบสุขภาพดิจิทัล เพื่อบริการประชาชนอย่างทั่วถึงและมีคุณภาพ" onChange={(event) => patch({ visionStatement: event.target.value })} />
-                <div className="unit-content-field-footer"><small>แสดงเต็มข้อความบนเว็บไซต์ ไม่ตัดด้วย …</small><span>{unit.visionStatement.length}/220</span></div>
+                <textarea id="unit-vision-statement" aria-label="วิสัยทัศน์" className="unit-content-vision-input" value={unit.visionStatement} maxLength={220} rows={3} placeholder="เช่น มุ่งพัฒนาระบบสุขภาพดิจิทัล เพื่อบริการประชาชนอย่างทั่วถึงและมีคุณภาพ" onChange={(event) => patch({ visionStatement: event.target.value })} />
+                <div className="unit-content-field-footer"><span>{unit.visionStatement.length}/220</span></div>
               </>}
               </div>
             </section>
@@ -597,14 +585,14 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
                     {(drag, snapshot) => <div ref={drag.innerRef} {...drag.draggableProps} className={`unit-mission-editor-item${snapshot.isDragging ? " dragging" : ""}`}>
                   <div className="unit-mission-editor-order"><button type="button" className="unit-mission-drag-handle" {...drag.dragHandleProps} aria-label={`ลากเพื่อจัดลำดับพันธกิจข้อ ${index + 1}`} title="ลากเพื่อจัดลำดับ"><GripVertical size={17}/></button><span className="unit-mission-editor-number">{String(index + 1).padStart(2, "0")}</span></div>
                   <div className="unit-mission-editor-fields">
-                    <label className="unit-mission-editor-title"><span className="unit-mission-field-label">หัวข้อ <UnsavedBadge show={changed(item.title, badgeUnit.missionItems?.find((saved) => saved.id === item.id)?.title)}/><small className="unit-mission-character-count">{item.title.length}/40</small></span><input value={item.title} maxLength={40} placeholder="เช่น พัฒนาระบบบริการ" onChange={(event) => patch({ missionItems: unit.missionItems?.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry) ?? [] })} /></label>
-                    <label className="unit-mission-editor-description"><span className="unit-mission-field-label">คำอธิบาย <UnsavedBadge show={changed(item.description, badgeUnit.missionItems?.find((saved) => saved.id === item.id)?.description)}/><small className="unit-mission-character-count">{item.description.length}/120</small></span><textarea value={item.description} maxLength={120} rows={2} placeholder="อธิบายเป้าหมายของข้อนี้แบบกระชับ" onChange={(event) => patch({ missionItems: unit.missionItems?.map((entry) => entry.id === item.id ? { ...entry, description: event.target.value } : entry) ?? [] })} /></label>
+                    <label className="unit-mission-editor-title"><span className="unit-mission-field-label"><span className="unit-mission-field-name">หัวข้อ <UnsavedBadge show={changed(item.title, badgeUnit.missionItems?.find((saved) => saved.id === item.id)?.title)}/></span><small className="unit-mission-character-count">{item.title.length}/40</small></span><input value={item.title} maxLength={40} placeholder="เช่น พัฒนาระบบบริการ" onChange={(event) => patch({ missionItems: unit.missionItems?.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry) ?? [] })} /></label>
+                    <label className="unit-mission-editor-description"><span className="unit-mission-field-label"><span className="unit-mission-field-name">คำอธิบาย <UnsavedBadge show={changed(item.description, badgeUnit.missionItems?.find((saved) => saved.id === item.id)?.description)}/></span><small className="unit-mission-character-count">{item.description.length}/120</small></span><textarea value={item.description} maxLength={120} rows={2} placeholder="อธิบายเป้าหมายของข้อนี้แบบกระชับ" onChange={(event) => patch({ missionItems: unit.missionItems?.map((entry) => entry.id === item.id ? { ...entry, description: event.target.value } : entry) ?? [] })} /></label>
                   </div>
                   <div className="unit-mission-editor-actions"><button type="button" onClick={() => setDeleteMissionId(item.id)} aria-label={`ลบพันธกิจข้อ ${index + 1}`} title="ลบข้อ"><Trash2 size={16} /></button></div>
                 </div>}
                   </Draggable>)}{drop.placeholder}</div>}
                 </Droppable></DragDropContext>
-                <button type="button" className="unit-content-add-mission" disabled={unit.missionItems.length >= 6} onClick={() => patch({ missionItems: [...(unit.missionItems ?? []), { id: crypto.randomUUID(), title: "", description: "" }] })}><Plus size={17} /> เพิ่มพันธกิจอีกข้อ</button>
+                <button type="button" className="unit-content-add-mission" disabled={unit.missionItems.length >= 6} onClick={() => patch({ missionItems: [...(unit.missionItems ?? []), { id: createId(), title: "", description: "" }] })}><Plus size={17} /> เพิ่มพันธกิจอีกข้อ</button>
               </>}
             </section>
             </div>
@@ -613,7 +601,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
           <DragDropContext onDragEnd={reorderServiceLink}>
             <div className="unit-service-workspace">
               <aside className="unit-service-categories" aria-label="หมวดบริการ">
-                <div className="unit-service-panel-heading"><strong>หมวดบริการ ({unit.services.length}/6)</strong><button type="button" disabled={unit.services.length >= 6} onClick={() => { const group = { id: crypto.randomUUID(), title: "หมวดบริการใหม่", icon: "heart-pulse" as const, accent: "primary" as const, items: [] }; patch({ services: [...unit.services, group] }); setSelectedServiceGroupId(group.id); setExpandedServiceLinkId(null); }}><Plus size={15}/>เพิ่มหมวด</button></div>
+                <div className="unit-service-panel-heading"><strong>หมวดบริการ ({unit.services.length}/6)</strong><button type="button" disabled={unit.services.length >= 6} onClick={() => { const group = { id: createId(), title: "หมวดบริการใหม่", icon: "heart-pulse" as const, accent: "primary" as const, items: [] }; patch({ services: [...unit.services, group] }); setSelectedServiceGroupId(group.id); setExpandedServiceLinkId(null); }}><Plus size={15}/>เพิ่มหมวด</button></div>
                 <Droppable droppableId="unit-service-groups" type="unit-service-group">
                   {(drop) => <div className="unit-service-category-list" ref={drop.innerRef} {...drop.droppableProps}>
                     {unit.services.map((group, index) => <Draggable key={group.id} draggableId={`unit-service-group:${group.id}`} index={index}>
@@ -641,7 +629,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
                     <UnitServiceIconPicker value={group.icon} dirty={changed(group.icon, badgeUnit.services.find((saved) => saved.id === group.id)?.icon)} onChange={(icon) => updateGroup({ icon })}/>
                     <EditorField label="สีขอบและไอคอน" dirty={changed(group.accent, badgeUnit.services.find((saved) => saved.id === group.id)?.accent)}><span className="unit-service-accent-select" data-accent={group.accent}><span className="unit-service-accent-swatch" aria-hidden="true"/><NativeSelect value={group.accent} onChange={(event) => updateGroup({ accent: event.target.value as UnitServiceGroup["accent"] })}><option value="primary">สีหลัก</option><option value="secondary">สีรอง</option><option value="accent">สีเน้น</option></NativeSelect></span></EditorField>
                   </div>
-                  <div className="unit-service-links-heading"><strong>รายการลิงก์ ({group.items.length}/8)</strong><button type="button" disabled={group.items.length >= 8} onClick={() => { const id = crypto.randomUUID(); updateGroup({ items: [...group.items, { id, label: "ลิงก์ใหม่", target: { kind: "module", module: "home" }, openInNewTab: false }] }); setExpandedServiceLinkId(id); }}><Plus size={15}/>เพิ่มลิงก์</button></div>
+                  <div className="unit-service-links-heading"><strong>รายการลิงก์ ({group.items.length}/8)</strong><button type="button" disabled={group.items.length >= 8} onClick={() => { const id = createId(); updateGroup({ items: [...group.items, { id, label: "ลิงก์ใหม่", target: { kind: "module", module: "home" }, openInNewTab: false }] }); setExpandedServiceLinkId(id); }}><Plus size={15}/>เพิ่มลิงก์</button></div>
                   <Droppable droppableId={`unit-service-links:${group.id}`} type="unit-service-link">
                     {(drop) => <div className="unit-service-link-list" ref={drop.innerRef} {...drop.droppableProps}>
                       {group.items.map((item, index) => <Draggable key={item.id} draggableId={`unit-service-link:${item.id}`} index={index}>
@@ -649,13 +637,13 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
                           <div className="unit-service-link-summary">
                             <span className="unit-service-link-handle" {...drag.dragHandleProps} aria-label={`ย้ายลิงก์ ${item.label}`}><GripVertical size={16}/></span>
                             <span className="unit-service-link-number">{index + 1}</span>
-                            <button type="button" className="unit-service-link-title" aria-expanded={expandedServiceLinkId === item.id} onClick={() => setExpandedServiceLinkId(expandedServiceLinkId === item.id ? null : item.id)}><strong>{item.label || "ลิงก์ใหม่"} <UnsavedBadge show={changed(item, badgeUnit.services.find((saved) => saved.id === group.id)?.items.find((saved) => saved.id === item.id))}/></strong><small>{serviceTargetSummary(item.target, pageSummaries, readUnits(true))}</small></button>
-                            <label className="unit-service-link-newtab"><span>เปิดในแท็บใหม่ <UnsavedBadge show={changed(item.openInNewTab, badgeUnit.services.find((saved) => saved.id === group.id)?.items.find((saved) => saved.id === item.id)?.openInNewTab)}/></span><input type="checkbox" checked={item.openInNewTab} onChange={(event) => updateGroup({ items: group.items.map((entry) => entry.id === item.id ? { ...entry, openInNewTab: event.target.checked } : entry) })}/></label>
+                            <button type="button" className="unit-service-link-title" aria-expanded={expandedServiceLinkId === item.id} onClick={() => setExpandedServiceLinkId(expandedServiceLinkId === item.id ? null : item.id)}><strong>{item.label || "ลิงก์ใหม่"} <UnsavedBadge show={changed(item, badgeUnit.services.find((saved) => saved.id === group.id)?.items.find((saved) => saved.id === item.id))}/></strong></button>
                             <button type="button" className="unit-service-link-expand" aria-label={expandedServiceLinkId === item.id ? "ย่อลิงก์" : "ขยายลิงก์"} onClick={() => setExpandedServiceLinkId(expandedServiceLinkId === item.id ? null : item.id)}><ChevronDown size={17}/></button>
                           </div>
                           {expandedServiceLinkId === item.id ? <div className="unit-service-link-fields">
                             <EditorField label="ชื่อลิงก์" dirty={changed(item.label, badgeUnit.services.find((saved) => saved.id === group.id)?.items.find((saved) => saved.id === item.id)?.label)}><input value={item.label} onChange={(event) => updateGroup({ items: group.items.map((entry) => entry.id === item.id ? { ...entry, label: event.target.value } : entry) })}/></EditorField>
                             <UnitServiceTargetFields target={item.target} dirty={changed(item.target, badgeUnit.services.find((saved) => saved.id === group.id)?.items.find((saved) => saved.id === item.id)?.target)} pages={pageSummaries} openInNewTab={item.openInNewTab} onChange={(target, openInNewTab) => updateGroup({ items: group.items.map((entry) => entry.id === item.id ? { ...entry, target, openInNewTab } : entry) })}/>
+                            <label className="unit-service-link-newtab"><span>เปิดในแท็บใหม่ </span><input type="checkbox" checked={item.openInNewTab} onChange={(event) => updateGroup({ items: group.items.map((entry) => entry.id === item.id ? { ...entry, openInNewTab: event.target.checked } : entry) })}/><UnsavedBadge show={changed(item.openInNewTab, badgeUnit.services.find((saved) => saved.id === group.id)?.items.find((saved) => saved.id === item.id)?.openInNewTab)}/></label>
                             <button type="button" className="unit-service-delete unit-service-link-delete" onClick={() => setDeleteService({ kind: "link", groupId: group.id, linkId: item.id, label: item.label })}><Trash2 size={15}/>ลบลิงก์</button>
                           </div> : null}
                         </div>}
@@ -677,7 +665,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
                 <Droppable droppableId="unit-personnel" direction="vertical">
                   {(drop) => <div className="unit-personnel-list" ref={drop.innerRef} {...drop.droppableProps}>
                     {unit.personnel.map((person, index) => {
-                      const photo = getDemoMediaItem(person.mediaId);
+                      const photo = displayMediaFor(person);
                       return <Draggable key={person.id} draggableId={person.id} index={index}>
                         {(drag, snapshot) => <div ref={drag.innerRef} {...drag.draggableProps} className={`unit-personnel-list-item${(unit.personnel.some((item) => item.id === selectedPersonId) ? selectedPersonId : unit.personnel[0]?.id) === person.id ? " selected" : ""}${snapshot.isDragging ? " dragging" : ""}${personnelSearch && !`${person.name} ${person.position}`.toLowerCase().includes(personnelSearch.toLowerCase()) ? " search-hidden" : ""}`}>
                           <span className="unit-person-drag" {...drag.dragHandleProps} aria-label={`ลากเพื่อจัดลำดับ ${person.name || `บุคลากร ${index + 1}`}`}><GripVertical size={17}/></span>
@@ -695,7 +683,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
             </aside>
             <div className="unit-personnel-editor">
               {unit.personnel.map((person, index) => {
-                    const photo = getDemoMediaItem(person.mediaId);
+                    const photo = displayMediaFor(person);
                     const savedPerson = badgeUnit.personnel.find((saved) => saved.id === person.id);
                     return (
                           <article
@@ -721,7 +709,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
                                 <div className="unit-person-heading-copy">
                                   <strong>{person.name || `บุคลากร ${index + 1}`}</strong>
                                   <small>{person.userId ? "เชื่อมกับโปรไฟล์ผู้ใช้" : "ข้อมูลแบบกรอกเอง"}</small>
-                                  {!person.userId ? <button className="unit-person-photo-action" type="button" onClick={() => setPersonPickerId(person.id)}><ImageIcon size={15} strokeWidth={1.8}/>{photo ? "เปลี่ยนรูป" : "เพิ่มรูปบุคลากร"}</button> : null}
+                                  {!person.userId && !photo ? <button className="unit-person-photo-action" type="button" onClick={() => setPersonPickerId(person.id)}><ImageIcon size={15} strokeWidth={1.8}/>เพิ่มรูปบุคลากร</button> : null}
                                 </div>
                               </div>
                               <div>
@@ -757,6 +745,11 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
                                       updatedAt: "เมื่อสักครู่",
                                       personnel: current.personnel.map((item) => item.id === person.id ? { ...item, photoFocus: { ...item.photoFocus, zoom } } : item),
                                     }))}
+                                    controlActions={<>
+                                      <button type="button" onClick={() => setPersonPickerId(person.id)}><ImageIcon size={15}/>เปลี่ยนรูป</button>
+                                      <button type="button" onClick={() => patch({ personnel: unit.personnel.map((item) => item.id === person.id ? { ...item, photoFocus: { x: 50, y: 25, zoom: 100 } } : item) })}>รีเซ็ตตำแหน่ง</button>
+                                      <button type="button" className="unit-cover-remove" onClick={() => patch({ personnel: unit.personnel.map((item) => item.id === person.id ? { ...item, mediaId: null, photoFocus: { x: 50, y: 25 } } : item) })}><Trash2 size={15}/>ลบรูป</button>
+                                    </>}
                                   />
                                 ) : null}
                                 {!person.userId ? <><div className="unit-form-grid unit-manual-person-grid">
@@ -1018,6 +1011,7 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
           onConfirm={() => persist(confirmAction === "publish")}
         />
       ) : null}
+      {confirmUnpublish ? <ConfirmDialog title="ยกเลิกเผยแพร่กลุ่มงาน?" description={`“${unit.name}” จะไม่แสดงบนเว็บไซต์ การแก้ไขที่ยังไม่ได้บันทึกในฟอร์มจะหายไป`} confirmLabel="ยกเลิกเผยแพร่" pending={unpublishPending} onClose={() => setConfirmUnpublish(false)} onConfirm={() => { void unpublish(); }}/> : null}
       {pendingLeaveHref ? <ConfirmDialog
         title="ออกจากหน้าหน่วยงานโดยไม่บันทึก?"
         description="การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป หากต้องการเก็บงานไว้ ให้ยกเลิกแล้วกดบันทึกร่างก่อนออกจากหน้า"
@@ -1031,7 +1025,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
           else window.location.assign(destination.href);
         }}
       /> : null}
-      {changesOpen && savedChanges?.length ? <UnitChangesDialog changes={savedChanges} onClose={() => setChangesOpen(false)}/> : null}
       {deleteMissionId ? <ConfirmDialog
         title={`ลบพันธกิจข้อ ${(unit.missionItems?.findIndex((item) => item.id === deleteMissionId) ?? -1) + 1}?`}
         description="พันธกิจข้อนี้จะถูกนำออกจากรายการ การเปลี่ยนแปลงจะมีผลเมื่อบันทึกกลุ่มงาน"
@@ -1063,20 +1056,20 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
         initialGrants={unit.accessGrants}
         options={accessOptions}
         onClose={() => setAccessDialogOpen(false)}
-        onSave={(accessLevel, accessGrants) => { if (accessLevel !== unit.accessLevel || JSON.stringify(accessGrants) !== JSON.stringify(unit.accessGrants)) { patch({ accessLevel, accessGrants }); setAccessDirty(true); } }}
+        onSave={(accessLevel, accessGrants) => { if (accessLevel !== unit.accessLevel || JSON.stringify(accessGrants) !== JSON.stringify(unit.accessGrants)) patch({ accessLevel, accessGrants }); }}
       /> : null}
       {personnelAddOpen ? <PersonnelAddDialog
         profiles={personnelProfiles.filter((profile) => profile.unitIds.includes(unit.id) && !unit.personnel.some((person) => person.userId === profile.id))}
         isNewUnit={!unitId}
         onClose={() => setPersonnelAddOpen(false)}
         onAddManual={() => {
-          const id = crypto.randomUUID();
+          const id = createId();
           patch({ personnel: [...unit.personnel, { id, userId: null, name: "", position: "", level: "", expertise: "", phone: "", phoneExtension: "", email: "", mediaId: null, photoFocus: { x: 50, y: 25 } }] });
           setSelectedPersonId(id);
           setPersonnelAddOpen(false);
         }}
         onAddProfile={(profile) => {
-          const id = crypto.randomUUID();
+          const id = createId();
           patch({ personnel: [...unit.personnel, { id, userId: profile.id, name: profile.name, position: profile.position, expertise: "", phone: profile.phone, phoneExtension: profile.phoneExtension, email: profile.email, mediaId: profile.mediaId, photoFocus: profile.photoFocus }] });
           setSelectedPersonId(id);
           setPersonnelAddOpen(false);
@@ -1084,28 +1077,6 @@ general: changed([unit.name, unit.shortName, unit.slug, unit.summary, unit.conta
       /> : null}
     </>
   );
-}
-
-function UnitChangesDialog({ changes, onClose }: { changes: UnitChangeGroup[]; onClose: () => void }) {
-  const allDetails = changes.flatMap((group) => group.details);
-  const additions = allDetails.filter((detail) => detail.startsWith("เพิ่ม")).length;
-  const removals = allDetails.filter((detail) => detail.startsWith("ลบ") || detail.startsWith("นำ") && detail.endsWith("ออก")).length;
-  return <div className="modal-layer unit-changes-layer" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
-    <button type="button" className="modal-backdrop" aria-label="ปิดรายการเปลี่ยนแปลง" onClick={onClose}/>
-    <section className="unit-changes-dialog" role="dialog" aria-modal="true" aria-labelledby="unit-changes-title" aria-describedby="unit-changes-description">
-      <header><div><span className="unit-changes-eyebrow">ตรวจสอบฉบับร่าง</span><h2 id="unit-changes-title">รายการเปลี่ยนแปลงที่ยังไม่เผยแพร่</h2><p id="unit-changes-description">เปรียบเทียบร่างที่บันทึกไว้กับหน้าเว็บไซต์ปัจจุบัน</p></div><button type="button" autoFocus aria-label="ปิด" onClick={onClose}><X size={20}/></button></header>
-      <div className="unit-changes-body">
-        <div className="unit-changes-stats" aria-label="สรุปการเปลี่ยนแปลง"><div><span className="unit-changes-stat-icon edited"><PenLine size={19}/></span><strong>{changes.length}</strong><small>ส่วนที่แก้ไข</small></div><div><span className="unit-changes-stat-icon added"><Plus size={20}/></span><strong>{additions}</strong><small>รายการเพิ่ม</small></div><div><span className="unit-changes-stat-icon removed"><Minus size={20}/></span><strong>{removals}</strong><small>รายการลบ</small></div></div>
-        <div className="unit-changes-timeline">{changes.map((group, groupIndex) => <details key={group.key} className="unit-changes-group" open><summary><span className="unit-changes-step">{groupIndex + 1}</span><span className="unit-changes-group-title"><strong>{group.title}</strong><small>{group.details.length} รายการ</small></span><ChevronDown size={18}/></summary><div className="unit-changes-items">{group.details.map((detail, index) => {
-          const kind = detail.startsWith("เพิ่ม") ? "added" : detail.startsWith("ลบ") || detail.startsWith("นำ") && detail.endsWith("ออก") ? "removed" : "edited";
-          const separator = detail.indexOf(": ");
-          const arrow = separator >= 0 ? detail.indexOf(" → ", separator + 2) : -1;
-          return <div className={`unit-changes-item ${kind}`} key={`${group.key}-${index}`}><span className="unit-changes-item-icon" aria-hidden="true">{kind === "added" ? <Plus size={17}/> : kind === "removed" ? <Minus size={17}/> : <PenLine size={16}/>}</span><div>{arrow >= 0 ? <><strong>{detail.slice(0, separator)}</strong><div className="unit-changes-values"><span><small>เดิม</small>{detail.slice(separator + 2, arrow)}</span><span className="unit-changes-arrow" aria-hidden="true">→</span><span><small>เปลี่ยนเป็น</small>{detail.slice(arrow + 3)}</span></div></> : <strong>{detail}</strong>}</div></div>;
-        })}</div></details>)}</div>
-      </div>
-      <footer><button type="button" onClick={onClose}>ปิด</button></footer>
-    </section>
-  </div>;
 }
 
 function UnitSaveConfirmDialog({
@@ -1202,7 +1173,7 @@ function EditorField({
 }
 
 function UnsavedBadge({ show }: { show: boolean }) {
-  return show ? <span className="unit-unsaved-badge" aria-label="ยังไม่เผยแพร่" title="ยังไม่เผยแพร่">!</span> : null;
+  return show ? <span className="splash-draft-field-badge">ยังไม่เผยแพร่</span> : null;
 }
 
 function UnitServiceIconPicker({ value, dirty, onChange }: { value: UnitServiceGroup["icon"]; dirty: boolean; onChange: (value: UnitServiceGroup["icon"]) => void }) {

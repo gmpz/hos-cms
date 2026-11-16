@@ -1,17 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type SyntheticEvent } from "react";
 import { ArrowUpRight, X } from "lucide-react";
 import type { PublicAnnouncement } from "@/features/announcements/types";
 import { RichText } from "@/features/pages/blocks/renderers/rich-text";
 import { announcementContentDocument } from "@/features/announcements/announcement-content";
 
-type Props = { announcements: PublicAnnouncement[]; showAnnouncements: boolean };
+type Props = { announcements: PublicAnnouncement[]; pathname: string; showAnnouncements: boolean };
 const appearanceDelayMs = 400;
 const pageLoadingSelector = "[data-public-page-loading]";
+const acknowledgedInDocument = new Set<string>();
+
+function announcementKey(item: PublicAnnouncement) {
+  return `${item.id}:${item.modalCookieVersion}`;
+}
+
+function hasVisiblePageLoading() {
+  return Array.from(document.querySelectorAll<HTMLElement>(pageLoadingSelector))
+    .some((element) => element.getClientRects().length > 0);
+}
 
 function AnnouncementDialog({ item, position, total, onDismiss }: { item: PublicAnnouncement; position: number; total: number; onDismiss: (showNext: boolean) => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const attentionAnimation = useRef<Animation | null>(null);
   const busyRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -27,6 +39,7 @@ function AnnouncementDialog({ item, position, total, onDismiss }: { item: Public
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      attentionAnimation.current?.cancel();
       if (dialog.open) dialog.close();
       document.body.style.overflow = previousOverflow;
     };
@@ -72,6 +85,19 @@ function AnnouncementDialog({ item, position, total, onDismiss }: { item: Public
     void dismiss();
   }
 
+  function refocusDialog(event: MouseEvent<HTMLDialogElement>) {
+    if (event.target !== event.currentTarget) return;
+    dialogRef.current?.focus({ preventScroll: true });
+    const card = cardRef.current;
+    if (!card || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    attentionAnimation.current?.cancel();
+    attentionAnimation.current = card.animate([
+      { transform: "scale(1)" },
+      { transform: "scale(1.02)", offset: 0.45 },
+      { transform: "scale(1)" },
+    ], { duration: 320, easing: "ease-out" });
+  }
+
   async function followLink(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     if (busyRef.current) return;
@@ -84,8 +110,8 @@ function AnnouncementDialog({ item, position, total, onDismiss }: { item: Public
   }
 
   return <dialog ref={dialogRef} className={`announcement-dialog mode-${item.contentMode.toLowerCase()}`}
-    aria-labelledby={`announcement-dialog-title-${item.id}`} tabIndex={-1} onCancel={onCancel}>
-    <div key={item.id} className="announcement-dialog-card">
+    aria-labelledby={`announcement-dialog-title-${item.id}`} tabIndex={-1} onCancel={onCancel} onClick={refocusDialog}>
+    <div ref={cardRef} key={item.id} className="announcement-dialog-card">
       <header className="announcement-dialog-header">
         <h2 id={`announcement-dialog-title-${item.id}`} aria-live="polite">{item.title}</h2>
         <button type="button" className="announcement-dialog-close" aria-label="ปิดประกาศนี้" disabled={pending} onClick={() => void dismiss()}><X size={20}/></button>
@@ -113,10 +139,10 @@ function AnnouncementDialog({ item, position, total, onDismiss }: { item: Public
   </dialog>;
 }
 
-export function PublicAnnouncementGate({ announcements, showAnnouncements }: Props) {
+export function PublicAnnouncementGate({ announcements, pathname, showAnnouncements }: Props) {
   const [index, setIndex] = useState(0);
-  const [ready, setReady] = useState(false);
-  const items = announcements.filter((candidate) => candidate.displayMode === "MODAL");
+  const [readyPath, setReadyPath] = useState<string | null>(null);
+  const items = useMemo(() => announcements.filter((candidate) => candidate.displayMode === "MODAL"), [announcements]);
   useEffect(() => {
     if (!showAnnouncements || items.length === 0) return;
     let firstFrame = 0;
@@ -131,7 +157,7 @@ export function PublicAnnouncementGate({ announcements, showAnnouncements }: Pro
       timer = 0;
     };
     const schedule = () => {
-      if (document.querySelector(pageLoadingSelector)) {
+      if (hasVisiblePageLoading()) {
         cancelPending();
         return;
       }
@@ -140,26 +166,39 @@ export function PublicAnnouncementGate({ announcements, showAnnouncements }: Pro
         firstFrame = 0;
         secondFrame = window.requestAnimationFrame(() => {
           secondFrame = 0;
-          if (document.querySelector(pageLoadingSelector)) return;
+          if (hasVisiblePageLoading()) return;
           timer = window.setTimeout(() => {
             timer = 0;
-            if (document.querySelector(pageLoadingSelector)) return;
+            if (hasVisiblePageLoading()) return;
             observer.disconnect();
-            setReady(true);
+            setIndex((current) => {
+              let next = current;
+              while (next < items.length && acknowledgedInDocument.has(announcementKey(items[next]))) next++;
+              return next;
+            });
+            setReadyPath(pathname);
           }, appearanceDelayMs);
         });
       });
     };
     const observer = new MutationObserver(schedule);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style"] });
     schedule();
     return () => {
       observer.disconnect();
       cancelPending();
     };
-  }, [showAnnouncements, items.length]);
-  if (!showAnnouncements || !ready) return null;
+  }, [showAnnouncements, items, pathname]);
+  if (!showAnnouncements || readyPath !== pathname) return null;
   const item = items[index];
   return item ? <AnnouncementDialog item={item} position={index + 1} total={items.length}
-    onDismiss={(showNext) => setIndex((current) => showNext ? current + 1 : items.length)} /> : null;
+    onDismiss={(showNext) => {
+      acknowledgedInDocument.add(announcementKey(item));
+      setIndex((current) => {
+        if (!showNext) return items.length;
+        let next = current + 1;
+        while (next < items.length && acknowledgedInDocument.has(announcementKey(items[next]))) next++;
+        return next;
+      });
+    }} /> : null;
 }

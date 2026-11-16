@@ -6,6 +6,11 @@ import { redirect } from "next/navigation";
 import { canAccessPage } from "@/server/access/repository";
 import { changePasswordPath } from "@/features/auth/return-to";
 import { getPublishedCmsPage } from "@/server/pages/repository";
+import { getInitialDocumentBlockPages } from "@/server/documents/block-page-data";
+import { getInitialNewsTabPosts } from "@/server/posts/block-tab-data";
+import { collectMediaIds } from "@/features/media/media-references";
+import { listPublicMediaItemsByIds } from "@/server/media/repository";
+import { attachResolvedMedia } from "@/server/media/resolve-references";
 
 export const instant = false;
 
@@ -20,5 +25,11 @@ export default async function CmsPage({ params }: { params: Promise<{ pagePath: 
     if (!await canAccessPage(path, user)) return <AccessDenied/>;
   }
   const page = await getPublishedCmsPage(path);
-  return page ? <PublicContentPage page={page}/> : <div className="public-content-missing"><h1>ไม่พบหน้าเว็บไซต์</h1><p>หน้านี้ยังไม่ได้เผยแพร่หรือไม่มีอยู่ในระบบ</p></div>;
+  if (!page) return <div className="public-content-missing"><h1>ไม่พบหน้าเว็บไซต์</h1><p>หน้านี้ยังไม่ได้เผยแพร่หรือไม่มีอยู่ในระบบ</p></div>;
+  const [initialDocumentPages, initialNewsTabPosts] = await Promise.all([
+    getInitialDocumentBlockPages(page.blocks),
+    getInitialNewsTabPosts(page.blocks),
+  ]);
+  const media = await listPublicMediaItemsByIds(collectMediaIds([page, initialDocumentPages]));
+  return <PublicContentPage page={attachResolvedMedia(page, media)} initialDocumentPages={initialDocumentPages} initialNewsTabPosts={initialNewsTabPosts}/>;
 }

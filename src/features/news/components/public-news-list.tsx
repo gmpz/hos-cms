@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PublicPagination } from "@/components/public/public-pagination";
 import { PublicIndexHero } from "@/components/public/public-index-hero";
 import {
@@ -15,7 +15,6 @@ import { postsChangeEvent } from "../demo/storage";
 import { fetchPostListPage, type PostListPage } from "../list-page";
 import { PublicNewsCard } from "./public-news-card";
 
-const subscribeToHydration = () => () => undefined;
 const pageSize = 12;
 const skeletonDelayMs = 180;
 const skeletonMinimumMs = 320;
@@ -24,18 +23,15 @@ export function PublicNewsList({
   initialUnit = "all",
   initialCategory = "all",
   initialYear = "latest",
+  initialPage = null,
 }: {
   initialUnit?: string;
   initialCategory?: string;
   initialYear?: string;
+  initialPage?: PostListPage | null;
 }) {
-  const hydrated = useSyncExternalStore(
-    subscribeToHydration,
-    () => true,
-    () => false,
-  );
-  const [postPage, setPostPage] = useState<PostListPage | null>(null);
-  const [loadedKey, setLoadedKey] = useState("");
+  const [postPage, setPostPage] = useState<PostListPage | null>(initialPage);
+  const [loadedKey, setLoadedKey] = useState(() => initialPage ? JSON.stringify([1, "", initialUnit, initialCategory, initialYear, 0]) : "");
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState("");
   const [units, setUnits] = useState<DemoUnit[]>([]);
@@ -113,7 +109,7 @@ export function PublicNewsList({
     return () => controller.abort();
   }, [currentPage, debouncedSearch, unitId, categoryId, year, refreshKey]);
 
-  if (!hydrated || (loading && !postPage && !loadError))
+  if (loading && !postPage && !loadError)
     return <PublicNewsSkeleton showCards={showSkeleton} />;
 
   const categoryCounts = postPage?.categoryCounts ?? {};

@@ -4,14 +4,47 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  getDemoMediaItem,
-  hydrateDemoMedia,
   mediaPreviewStyle,
   subscribeDemoMedia,
 } from "@/features/media/demo/media-registry";
 import type { BlockConfigMap } from "../config/types";
+import { displayMediaFor } from "@/features/media/resolved-media";
 
 type GalleryConfig = BlockConfigMap["gallery"];
+
+function sliderImages(track: HTMLDivElement) {
+  return [...track.querySelectorAll<HTMLButtonElement>(".gallery-slider-image")];
+}
+
+function centeredImageIndex(track: HTMLDivElement, images: HTMLButtonElement[]) {
+  const center = track.getBoundingClientRect().left + track.clientWidth / 2;
+  return images.reduce((nearest, image, index) => {
+    const bounds = image.getBoundingClientRect();
+    const distance = Math.abs(bounds.left + bounds.width / 2 - center);
+    const nearestBounds = images[nearest].getBoundingClientRect();
+    const nearestDistance = Math.abs(nearestBounds.left + nearestBounds.width / 2 - center);
+    return distance < nearestDistance ? index : nearest;
+  }, 0);
+}
+
+function centerSliderImage(track: HTMLDivElement, image: HTMLButtonElement) {
+  const trackBounds = track.getBoundingClientRect();
+  const imageBounds = image.getBoundingClientRect();
+  track.scrollTo({
+    left: track.scrollLeft + imageBounds.left + imageBounds.width / 2 - trackBounds.left - trackBounds.width / 2,
+    behavior: "smooth",
+  });
+}
+
+function centersSliderImages(track: HTMLDivElement) {
+  const image = track.querySelector<HTMLElement>(".gallery-slider-image");
+  return image ? getComputedStyle(image).scrollSnapAlign.startsWith("center") : false;
+}
+
+function scrollSliderPage(track: HTMLDivElement, direction: -1 | 1) {
+  const gap = Number.parseFloat(getComputedStyle(track).columnGap) || 0;
+  track.scrollBy({ left: direction * (track.clientWidth + gap), behavior: "smooth" });
+}
 
 export function Gallery({ config }: { config: GalleryConfig }) {
   const [active, setActive] = useState<number | null>(null);
@@ -19,14 +52,18 @@ export function Gallery({ config }: { config: GalleryConfig }) {
   const sliderRef = useRef<HTMLDivElement>(null);
   const activeIndex = active ?? 0;
   const selected = active === null ? null : config.images[activeIndex];
-  const media = selected ? getDemoMediaItem(selected.mediaId) : null;
+  const media = selected ? displayMediaFor(selected) : null;
   const moveSlider = (direction: -1 | 1) => {
     const track = sliderRef.current;
     if (!track) return;
-    track.scrollBy({
-      left: direction * track.clientWidth,
-      behavior: "smooth",
-    });
+    if (!centersSliderImages(track)) {
+      scrollSliderPage(track, direction);
+      return;
+    }
+    const images = sliderImages(track);
+    if (!images.length) return;
+    const next = Math.max(0, Math.min(images.length - 1, centeredImageIndex(track, images) + direction));
+    centerSliderImage(track, images[next]);
   };
 
   useEffect(() => {
@@ -35,12 +72,31 @@ export function Gallery({ config }: { config: GalleryConfig }) {
       if (mounted) setMediaRevision((value) => value + 1);
     };
     const unsubscribe = subscribeDemoMedia(refresh);
-    void hydrateDemoMedia().then(refresh);
     return () => {
       mounted = false;
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (config.layout !== "slider") return;
+    const track = sliderRef.current;
+    if (!track) return;
+    let slideWidthRule = getComputedStyle(track).getPropertyValue("--gallery-slide-width").trim();
+    const resetAfterLayoutChange = () => {
+      const nextRule = getComputedStyle(track).getPropertyValue("--gallery-slide-width").trim();
+      if (nextRule === slideWidthRule) return;
+      slideWidthRule = nextRule;
+      track.scrollLeft = 0;
+    };
+    const observer = new ResizeObserver(resetAfterLayoutChange);
+    observer.observe(track);
+    window.addEventListener("resize", resetAfterLayoutChange);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resetAfterLayoutChange);
+    };
+  }, [config.layout]);
 
   useEffect(() => {
     if (active === null) return;
@@ -64,14 +120,16 @@ export function Gallery({ config }: { config: GalleryConfig }) {
     const timer = window.setInterval(() => {
       const track = sliderRef.current;
       if (!track) return;
-      const end = track.scrollWidth - track.clientWidth;
-      if (track.scrollLeft >= end - 4)
-        track.scrollTo({ left: 0, behavior: "smooth" });
-      else
-        track.scrollBy({
-          left: track.clientWidth,
-          behavior: "smooth",
-        });
+      if (!centersSliderImages(track)) {
+        const end = track.scrollWidth - track.clientWidth;
+        if (track.scrollLeft >= end - 4) track.scrollTo({ left: 0, behavior: "smooth" });
+        else scrollSliderPage(track, 1);
+        return;
+      }
+      const images = sliderImages(track);
+      if (!images.length) return;
+      const next = (centeredImageIndex(track, images) + 1) % images.length;
+      centerSliderImage(track, images[next]);
     }, config.intervalSeconds * 1000);
     return () => window.clearInterval(timer);
   }, [
@@ -105,7 +163,7 @@ export function Gallery({ config }: { config: GalleryConfig }) {
     {config.layout === "slider" && config.images.length ? <div className={`gallery-slider gallery-slider-four-up${config.images.length <= 4 ? " has-no-overflow" : ""}`} aria-roledescription="carousel" aria-label={config.title || "แกลเลอรีภาพ"}>
       <div className="gallery-slider-track" ref={sliderRef}>
       {config.images.map((item, index) => {
-        const itemMedia = getDemoMediaItem(item.mediaId);
+        const itemMedia = displayMediaFor(item);
         return <button type="button" className="gallery-slider-image" key={item.mediaId} onClick={() => setActive(index)} aria-label={`เปิดดูภาพขนาดใหญ่ ${item.alt || itemMedia?.name || `รูปที่ ${index + 1}`}`}>
           <span className={`block-media ${itemMedia ? "has-media" : ""}`} style={mediaPreviewStyle(itemMedia)} role="img" aria-label={item.alt || itemMedia?.alt || "รูปภาพ"}/>
         </button>;
@@ -117,7 +175,7 @@ export function Gallery({ config }: { config: GalleryConfig }) {
       </> : null}
     </div> : <div className={`gallery-grid columns-${config.columns}`}>
       {config.images.length ? config.images.map((item, index) => {
-        const itemMedia = getDemoMediaItem(item.mediaId);
+        const itemMedia = displayMediaFor(item);
         return <button type="button" className="gallery-item" key={item.mediaId} onClick={() => setActive(index)} aria-label={`เปิดดูภาพขนาดใหญ่ ${item.alt || itemMedia?.name || `รูปที่ ${index + 1}`}`}>
           <span className={`block-media ${itemMedia ? "has-media" : ""}`} style={mediaPreviewStyle(itemMedia)} role="img" aria-label={item.alt || itemMedia?.alt || "รูปภาพ"}/>
         </button>;

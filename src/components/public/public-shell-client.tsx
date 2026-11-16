@@ -4,13 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode, type CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
-import {
-  getDemoMediaItem,
-  mediaPreviewStyle,
-  seedDemoMediaItems,
-} from "@/features/media/demo/media-registry";
-import type { UploadedMediaItem } from "@/features/media/upload-media-file";
-import { PublicMediaProvider } from "@/features/media/public-media-context";
+import { mediaPreviewStyle } from "@/features/media/demo/media-registry";
 import { readPosts, refreshPosts, seedPublicPosts } from "@/features/news/demo/storage";
 import type { DemoPost } from "@/features/pages/demo/data";
 import {
@@ -31,14 +25,12 @@ import { isGoogleMapsUrl } from "@/features/site-settings/map-url";
 import { isSocialUrl } from "@/features/site-settings/social-url";
 import { logoPositionStyle } from "@/features/site-settings/logo-position";
 import { ChevronRight, LogIn, Mail, MapPin, Menu, MessageCircle, PanelLeftClose, PanelLeftOpen, Phone, Play, Search, X } from "lucide-react";
-import { useMediaRevision } from "@/features/media/use-media-revision";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import { PublicVisitTracker } from "@/features/analytics/components/public-visit-tracker";
 import { PublicVisitTotal } from "@/features/analytics/components/public-visit-total";
 import { LinkTargetCatalogProvider } from "@/features/navigation/link-target-catalog-context";
 import type { LinkTargetCatalog } from "@/features/navigation/resolve-link-target";
 import type { Navigation } from "@/features/navigation/types";
-import { seedPublicDocuments } from "@/features/documents/demo/storage";
-import type { DemoDocument } from "@/features/documents/demo/model";
 import type { DemoUnit } from "@/features/units/demo/model";
 import { seedCategories } from "@/features/categories/demo/storage";
 import type { DemoCategory } from "@/features/categories/types";
@@ -49,9 +41,7 @@ type PublicShellClientProps = {
   initialNavigation: Navigation;
   initialNavigationAuthenticated: boolean;
   initialUser: PublicShellUser | null;
-  initialMedia: UploadedMediaItem[];
   initialPosts: DemoPost[];
-  initialDocuments: DemoDocument[];
   initialUnits: DemoUnit[];
   initialCategories: { posts: DemoCategory[]; documents: DemoCategory[] };
   linkTargetCatalog: LinkTargetCatalog;
@@ -66,15 +56,12 @@ type PublicShellUser = {
   profilePhotoZoom: number;
 };
 
-export function PublicShellClient({ children, initialSettings, initialNavigation, initialNavigationAuthenticated, initialUser, initialMedia = [], initialPosts = [], initialDocuments = [], initialUnits = [], initialCategories = { posts: [], documents: [] }, linkTargetCatalog }: PublicShellClientProps) {
-  seedDemoMediaItems(initialMedia);
+export function PublicShellClient({ children, initialSettings, initialNavigation, initialNavigationAuthenticated, initialUser, initialPosts = [], initialUnits = [], initialCategories = { posts: [], documents: [] }, linkTargetCatalog }: PublicShellClientProps) {
   seedPublicPosts(initialPosts);
-  seedPublicDocuments(initialDocuments);
   seedPublicUnits(initialUnits);
   seedCategories("posts", initialCategories.posts);
   seedCategories("documents", initialCategories.documents);
   const pathname = usePathname();
-  useMediaRevision();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -128,7 +115,7 @@ export function PublicShellClient({ children, initialSettings, initialNavigation
       .catch(() => undefined);
     return () => controller.abort();
   }, [pathname]);
-  const logo = getDemoMediaItem(settings.logoMediaId);
+  const logo = displayMediaFor(settings, "logoMediaId");
   const style = {
     "--primary": settings.theme.primary,
     "--secondary": settings.theme.secondary,
@@ -146,7 +133,6 @@ export function PublicShellClient({ children, initialSettings, initialNavigation
   const isStandaloneAuthPage = pathname === "/login" || pathname === "/change-password";
   if (isStandaloneAuthPage) return <LinkTargetCatalogProvider catalog={linkTargetCatalog}>{children}</LinkTargetCatalogProvider>;
   return (
-    <PublicMediaProvider items={initialMedia}>
     <LinkTargetCatalogProvider catalog={linkTargetCatalog}>
     <div className="public-shell" style={style}>
       <Suspense fallback={null}><PublicVisitTracker /></Suspense>
@@ -231,7 +217,6 @@ export function PublicShellClient({ children, initialSettings, initialNavigation
       </div>
     </div>
     </LinkTargetCatalogProvider>
-    </PublicMediaProvider>
   );
 }
 

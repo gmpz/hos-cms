@@ -11,13 +11,13 @@ import {
 import { documentActionLabel, isPdfFile } from "@/features/media/file-behavior";
 import { DocumentFileIcon } from "@/features/media/components/document-file-icon";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
+import { DocumentNewBadge } from "./document-new-badge";
 import { documentFileUrl } from "../document-file-name";
 import { recordDocumentAccess } from "../record-document-access";
-import { getDemoMediaItem } from "@/features/media/demo/media-registry";
+import { documentMedia } from "../document-media";
 import type { DemoUnit } from "@/features/units/demo/model";
 import { readUnits } from "@/features/units/demo/storage";
 import type { DemoDocument } from "../demo/model";
-import { useMediaRevision } from "@/features/media/use-media-revision";
 import { documentsChangeEvent, fetchPublicDocumentPage, type PublicDocumentPage } from "../demo/storage";
 
 const subscribeToHydration = () => () => undefined;
@@ -34,7 +34,6 @@ export function PublicDocumentsList({
   initialCategory?: string;
   initialYear?: string;
 }) {
-  useMediaRevision();
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     () => true,
@@ -318,7 +317,7 @@ function PublicDocumentRow({
 }: {
   document: DemoDocument;
 }) {
-  const media = getDemoMediaItem(document.mediaIds[0] ?? null);
+  const media = documentMedia(document);
   if (media && isPdfFile(media)) {
     return <div className="public-document-row public-document-row-with-download unit-document-row-with-download">
       <DocumentFileLink className="public-document-open" media={media} href={documentFileUrl(document.id, document.title, media.mimeType)}>
@@ -328,6 +327,7 @@ function PublicDocumentRow({
           <small className="public-document-card-meta">
             <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
             <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
+            <DocumentNewBadge isNew={document.isNew}/>
           </small>
         </span>
       </DocumentFileLink>
@@ -342,6 +342,7 @@ function PublicDocumentRow({
         <small className="public-document-card-meta">
           <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
           <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
+          <DocumentNewBadge isNew={document.isNew}/>
         </small>
       </span>
       {media ? <span className="public-document-action public-document-download unit-document-download-indicator" title={documentActionLabel(media)}><Download size={16} aria-hidden="true"/><span>{media.size}</span></span> : <b className="public-document-action">{document.mediaIds.length} ไฟล์</b>}

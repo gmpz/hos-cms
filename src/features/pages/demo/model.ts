@@ -1,3 +1,4 @@
+import { createId } from "@/utils/create-id";
 import type { BlockConfigMap, PageBlock } from "../blocks/config/types";
 import { richTextDocumentFromMarkdown } from "../blocks/migrations/rich-text";
 import { navigationIconNames } from "@/features/navigation/icon-names";
@@ -122,7 +123,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           contentPosition: "center-left",
           slides: [
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "บริการสุขภาพที่เข้าถึงง่าย",
               description: "โรงพยาบาลคลองหลวง พร้อมดูแลประชาชนทุกช่วงวัย",
               imageId: null,
@@ -240,21 +241,21 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           columns: 3,
           items: [
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "บริการผู้ป่วยนอก",
               description: "ข้อมูลขั้นตอนและเวลาการให้บริการ",
               visual: { kind: "icon", icon: "stethoscope" },
               target: { kind: "module", module: "services" },
             },
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "หน่วยงาน",
               description: "ค้นหาข้อมูลหน่วยงานภายในโรงพยาบาล",
               visual: { kind: "icon", icon: "users" },
               target: { kind: "module", module: "units" },
             },
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "เอกสารดาวน์โหลด",
               description: "แบบฟอร์ม คู่มือ และเอกสารเผยแพร่",
               visual: { kind: "icon", icon: "file-text" },
@@ -274,24 +275,24 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           columns: 3,
           groups: [
             {
-              id: crypto.randomUUID(), title: "บริการประชาชน", icon: "heart-pulse", accent: "primary",
+              id: createId(), title: "บริการประชาชน", icon: "heart-pulse", accent: "primary",
               items: [
-                { id: crypto.randomUUID(), label: "บริการออนไลน์", target: { kind: "module", module: "services" }, openInNewTab: false },
-                { id: crypto.randomUUID(), label: "ติดต่อโรงพยาบาล", target: { kind: "module", module: "contact" }, openInNewTab: false },
+                { id: createId(), label: "บริการออนไลน์", target: { kind: "module", module: "services" }, openInNewTab: false },
+                { id: createId(), label: "ติดต่อโรงพยาบาล", target: { kind: "module", module: "contact" }, openInNewTab: false },
               ],
             },
             {
-              id: crypto.randomUUID(), title: "เอกสารและคลังความรู้", icon: "book-open", accent: "secondary",
+              id: createId(), title: "เอกสารและคลังความรู้", icon: "book-open", accent: "secondary",
               items: [
-                { id: crypto.randomUUID(), label: "เอกสารเผยแพร่", target: { kind: "module", module: "documents" }, openInNewTab: false },
-                { id: crypto.randomUUID(), label: "ข่าวสารและกิจกรรม", target: { kind: "module", module: "news" }, openInNewTab: false },
+                { id: createId(), label: "เอกสารเผยแพร่", target: { kind: "module", module: "documents" }, openInNewTab: false },
+                { id: createId(), label: "ข่าวสารและกิจกรรม", target: { kind: "module", module: "news" }, openInNewTab: false },
               ],
             },
             {
-              id: crypto.randomUUID(), title: "หน่วยงานและระบบ", icon: "globe", accent: "accent",
+              id: createId(), title: "หน่วยงานและระบบ", icon: "globe", accent: "accent",
               items: [
-                { id: crypto.randomUUID(), label: "หน่วยงานภายใน", target: { kind: "module", module: "units" }, openInNewTab: false },
-                { id: crypto.randomUUID(), label: "ค้นหาข้อมูล", target: { kind: "module", module: "search" }, openInNewTab: false },
+                { id: createId(), label: "หน่วยงานภายใน", target: { kind: "module", module: "units" }, openInNewTab: false },
+                { id: createId(), label: "ค้นหาข้อมูล", target: { kind: "module", module: "search" }, openInNewTab: false },
               ],
             },
           ],
@@ -378,11 +379,14 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
     case "faq":
       return {
         ...base,
+        version: 2,
         type,
         config: {
+          title: "คำถามที่พบบ่อย",
+          description: "",
           items: [
             {
-              question: "คำถามที่พบบ่อย",
+              question: "คำถามใหม่",
               answer: "เพิ่มคำตอบที่ต้องการเผยแพร่",
             },
           ],
@@ -415,10 +419,10 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           description: "ภาพรวมการให้บริการและพื้นที่รับผิดชอบ",
           columns: 4,
           items: [
-            { id: crypto.randomUUID(), value: "30", label: "เตียง", description: "ขนาดโรงพยาบาล", icon: "hospital" as const },
-            { id: crypto.randomUUID(), value: "7", label: "ตำบล", description: "พื้นที่รับผิดชอบ", icon: "map-pin" as const },
-            { id: crypto.randomUUID(), value: "200", label: "บุคลากร", description: "ทีมสหวิชาชีพ", icon: "users" as const },
-            { id: crypto.randomUUID(), value: "230", label: "คน/วัน", description: "ผู้รับบริการเฉลี่ย", icon: "activity" as const },
+            { id: createId(), value: "30", label: "เตียง", description: "ขนาดโรงพยาบาล", icon: "hospital" as const },
+            { id: createId(), value: "7", label: "ตำบล", description: "พื้นที่รับผิดชอบ", icon: "map-pin" as const },
+            { id: createId(), value: "200", label: "บุคลากร", description: "ทีมสหวิชาชีพ", icon: "users" as const },
+            { id: createId(), value: "230", label: "คน/วัน", description: "ผู้รับบริการเฉลี่ย", icon: "activity" as const },
           ],
         },
       };
@@ -443,9 +447,9 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           description: "เตรียมตัวและรับบริการตามขั้นตอน",
           layout: "horizontal",
           items: [
-            { id: crypto.randomUUID(), title: "ลงทะเบียน", description: "ติดต่อจุดลงทะเบียน" },
-            { id: crypto.randomUUID(), title: "รอรับบริการ", description: "รอเรียกตามลำดับคิว" },
-            { id: crypto.randomUUID(), title: "รับบริการ", description: "เข้ารับบริการตามนัดหมาย" },
+            { id: createId(), title: "ลงทะเบียน", description: "ติดต่อจุดลงทะเบียน" },
+            { id: createId(), title: "รอรับบริการ", description: "รอเรียกตามลำดับคิว" },
+            { id: createId(), title: "รับบริการ", description: "เข้ารับบริการตามนัดหมาย" },
           ],
         },
       };
@@ -484,7 +488,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           title: "ลำดับเหตุการณ์",
           description: "เหตุการณ์และพัฒนาการที่สำคัญ",
           items: [
-            { id: crypto.randomUUID(), date: "2569", title: "เหตุการณ์สำคัญ", description: "เพิ่มรายละเอียดเหตุการณ์" },
+            { id: createId(), date: "2569", title: "เหตุการณ์สำคัญ", description: "เพิ่มรายละเอียดเหตุการณ์" },
           ],
         },
       };
@@ -533,7 +537,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
     case "documents":
       return {
         ...base,
-        version: 5,
+        version: 6,
         type,
         config: {
           title: "เอกสารเผยแพร่",
@@ -545,6 +549,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
               label: "เอกสารทั้งหมด",
               source: { kind: "all" },
               categoryId: null,
+              fiscalYear: "all",
             },
           ],
           limit: 6,
@@ -918,7 +923,9 @@ export function isDemoPage(value: unknown): value is DemoPage {
         );
       case "faq":
         return (
-          b.version === 1 &&
+          b.version === 2 &&
+          typeof c.title === "string" &&
+          typeof c.description === "string" &&
           Array.isArray(c.items) &&
           c.items.length <= 12 &&
           c.items.every(
@@ -1090,7 +1097,7 @@ export function isDemoPage(value: unknown): value is DemoPage {
         );
       case "documents":
         return (
-          b.version === 5 &&
+          b.version === 6 &&
           typeof c.title === "string" &&
           typeof c.description === "string" &&
           ["cards", "table"].includes(String(c.layout)) &&
@@ -1111,7 +1118,9 @@ export function isDemoPage(value: unknown): value is DemoPage {
                   Array.isArray(tab.source.documentIds) &&
                   tab.source.documentIds.length <= 30 &&
                   tab.source.documentIds.every((id) => typeof id === "string"))) &&
-              (tab.categoryId === null || typeof tab.categoryId === "string"),
+              (tab.categoryId === null || typeof tab.categoryId === "string") &&
+              (tab.fiscalYear === "all" ||
+                (Number.isInteger(tab.fiscalYear) && Number(tab.fiscalYear) >= 2400 && Number(tab.fiscalYear) <= 2800)),
           ) &&
           Number.isInteger(c.limit) &&
           Number(c.limit) >= 1 &&

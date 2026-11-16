@@ -58,6 +58,7 @@ export type AnnouncementDto = {
   status: AnnouncementStatus;
   revision: number;
   publishedAt: string | null;
+  deletedAt: string | null;
   updatedAt: string;
 };
 

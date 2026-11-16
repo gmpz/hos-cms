@@ -1,6 +1,9 @@
 "use client";
 
+import { createId } from "@/utils/create-id";
+
 import { showGlobalToast } from "@/components/ui/global-toast";
+import { PublishDropdown } from "@/components/admin/publish-dropdown";
 import { NativeSelect } from "@/components/ui/native-select";
 import { ConfirmDialog as SystemConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AnchoredSelect } from "@/components/ui/anchored-select";
@@ -18,7 +21,6 @@ import {
   Ban,
   CalendarDays,
   CheckCircle2,
-  CircleCheck,
   ChevronDown,
   CircleAlert,
   CircleHelp,
@@ -39,7 +41,6 @@ import {
   GalleryHorizontal,
   GripVertical,
   Heading2,
-  History,
   Image as ImageIcon,
   Images,
   Info,
@@ -95,6 +96,8 @@ import { navigationIconNames, type NavigationIconName } from "@/features/navigat
 import { NavigationIcon, navigationIcons } from "@/features/navigation/navigation-icons";
 import { BlockRenderer, blockContainerClassName } from "../blocks/renderers/block-renderer";
 import { PageHeaderBanner } from "./page-header-banner";
+import { PublicContentPage } from "./public-content-page";
+import { PublicHome } from "./public-home";
 import {
   blockPositionsForWidth,
   normalizeBlockPosition,
@@ -114,18 +117,18 @@ import {
 import type { DemoPageSummary } from "../demo/pages";
 import { MediaPicker } from "@/features/media/components/media-picker";
 import { DocumentFileIcon } from "@/features/media/components/document-file-icon";
-import { useMediaRevision } from "@/features/media/use-media-revision";
 import { AccessControlButton, AccessControlDialog } from "@/features/access/components/access-control-dialog";
 import type { AccessGrants, AccessLevel, AccessOptions } from "@/features/access/types";
 import {
-  getDemoMediaItem,
   mediaPreviewStyle,
 } from "@/features/media/demo/media-registry";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import { RichTextEditor } from "../blocks/editors/rich-text-editor-client";
 import { SecondaryRichTextEditor } from "../blocks/editors/secondary-rich-text-editor";
 import { ImageDisplaySettings } from "../blocks/editors/image-display-settings";
 import { TableSettings } from "../blocks/editors/table-settings";
 import { TableCanvasEditor } from "../blocks/editors/table-canvas-editor";
+import { fetchPublicDocumentPage } from "@/features/documents/demo/storage";
 import { StatisticsSettings } from "../blocks/editors/statistics-settings";
 import {
   ContactInfoSettings,
@@ -157,7 +160,6 @@ const blockKinds: BuilderKind[] = [
   "faq",
   "table",
   "statistics",
-  "personnel",
   "processSteps",
   "contactInfo",
   "map",
@@ -242,7 +244,6 @@ export function HomeBuilder(props: HomeBuilderProps) {
 }
 
 function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAccessLevel, initialAccessGrants, accessOptions }: HomeBuilderProps) {
-  useMediaRevision();
   const router = useRouter();
   const pagePath = summary.path;
   const [page, setPage] = useState<DemoPage>(initialPage);
@@ -260,25 +261,23 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
   const [preview, setPreview] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [accessDirty, setAccessDirty] = useState(false);
   const [accessLevel, setAccessLevel] = useState<AccessLevel>(initialAccessLevel);
   const [accessGrants, setAccessGrants] = useState<AccessGrants>(initialAccessGrants);
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [insertAt, setInsertAt] = useState<number | null | "end">(null);
-  const [confirm, setConfirm] = useState<"publish" | "leave" | "delete" | "discard" | null>(
+  const [confirm, setConfirm] = useState<"publish" | "unpublish" | "leave" | "delete" | "discard" | null>(
     null,
   );
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const setToast = showGlobalToast;
   const settingsBlock =
     page.blocks.find((block) => block.id === settingsBlockId) ?? null;
   const pendingDeleteBlock =
     page.blocks.find((block) => block.id === pendingDeleteId) ?? null;
   const hasChanges = savedSnapshot !== pageSnapshot(page, accessLevel, accessGrants);
-  const effectiveSaveState: SaveState = saveState === "saving" ? "saving" : hasChanges ? "unsaved" : "saved";
   const savedPage = (JSON.parse(savedSnapshot) as { page: DemoPage }).page;
   const hasUnpublishedChanges = pageStatus === "published" && publishedPage !== null && JSON.stringify(savedPage) !== JSON.stringify(publishedPage);
+  const showDraftNotice = hasChanges || hasUnpublishedChanges || pageStatus === "draft";
   const draftLabels = new Map<string, string>();
   const publishedBlocks = publishedPage?.blocks ?? [];
   for (const [index, block] of page.blocks.entries()) {
@@ -317,7 +316,7 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
     setSaveState("unsaved");
   }
   function addBlock(kind: BuilderKind, index = page.blocks.length) {
-    const block = createBlock(kind, crypto.randomUUID());
+    const block = createBlock(kind, createId());
     commit([
       ...page.blocks.slice(0, index),
       block,
@@ -340,7 +339,7 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
     const index = page.blocks.findIndex((block) => block.id === id);
     const source = page.blocks[index];
     if (!source) return;
-    const copy = { ...source, id: crypto.randomUUID() } as BuilderBlock;
+    const copy = { ...source, id: createId() } as BuilderBlock;
     commit([
       ...page.blocks.slice(0, index + 1),
       copy,
@@ -392,7 +391,6 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
       setSavedSnapshot(pageSnapshot(saved.page, saved.accessLevel, saved.accessGrants));
       await refreshPageSummaries();
       setSaveState("saved");
-      setAccessDirty(false);
       setToast({
         title: publish ? "เผยแพร่เรียบร้อยแล้ว" : "บันทึกเรียบร้อยแล้ว",
         description: publish
@@ -434,13 +432,43 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
       setSelected(null);
       setSettingsBlockId(null);
       setConfirm(null);
-      setAccessDirty(false);
       setSaveState("saved");
       setToast({ title: "ยกเลิกร่างแล้ว", description: "กลับไปใช้ฉบับที่เผยแพร่อยู่ เว็บไซต์ไม่เปลี่ยนแปลง" });
     } catch (error) {
       setConfirm(null);
       setSaveState("saved");
       setToast({ title: "ยกเลิกร่างไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
+    }
+  }
+  async function unpublish() {
+    if (saveState === "saving" || pageStatus !== "published") return;
+    setSaveState("saving");
+    try {
+      const response = await fetch(`/api/pages/${encodeURIComponent(pageId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unpublish", revision }),
+      });
+      const result = await response.json() as { summary?: { revision: number }; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "ยกเลิกเผยแพร่ไม่สำเร็จ");
+      const refreshed = await fetch(`/api/pages/${encodeURIComponent(pageId)}`, { cache: "no-store" });
+      if (!refreshed.ok) throw new Error("โหลดข้อมูลหน้าหลังยกเลิกเผยแพร่ไม่สำเร็จ");
+      const updated = await refreshed.json() as SavedPageResponse;
+      setPage(updated.page);
+      setPublishedPage(updated.publishedPage);
+      setPageStatus(updated.summary.status);
+      setRevision(updated.revision);
+      setAccessLevel(updated.accessLevel);
+      setAccessGrants(updated.accessGrants);
+      setSavedSnapshot(pageSnapshot(updated.page, updated.accessLevel, updated.accessGrants));
+      setSaveState("saved");
+      setConfirm(null);
+      await refreshPageSummaries();
+      setToast({ title: "ยกเลิกเผยแพร่แล้ว", description: `หน้า ${page.title} ไม่แสดงบนเว็บไซต์แล้ว` });
+    } catch (error) {
+      setSaveState("saved");
+      setConfirm(null);
+      setToast({ title: "ยกเลิกเผยแพร่ไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
     }
   }
   function onDragEnd(result: DropResult) {
@@ -582,9 +610,6 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
                     setSaveState("unsaved");
                   }}
                 />
-                <small>
-                  / · {accessDirty && effectiveSaveState !== "saving" ? <span className="save-unsaved">● สิทธิ์ยังไม่บันทึก</span> : <SaveLabel state={effectiveSaveState} hasDraft={hasUnpublishedChanges || pageStatus === "draft"} />}
-                </small>
               </div>
             </div>
             <div className="builder-toolbar-actions">
@@ -621,44 +646,38 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
                   </IconButton>
                 </div>
               ) : null}
-              <div className="builder-viewports">
+              {preview ? <div className="builder-viewports">
                 {(["desktop", "tablet", "mobile"] as const).map((value) => {
-                  const Icon =
-                    value === "desktop"
-                      ? Monitor
-                      : value === "tablet"
-                        ? Tablet
-                        : Smartphone;
-                  return (
-                    <button
-                      key={value}
-                      className={viewport === value ? "active" : ""}
-                      aria-label={value}
-                      onClick={() => setViewport(value)}
-                    >
-                      <Icon size={16} />
-                    </button>
-                  );
+                  const Icon = value === "desktop" ? Monitor : value === "tablet" ? Tablet : Smartphone;
+                  return <button key={value} type="button" className={viewport === value ? "active" : ""} aria-label={value} onClick={() => setViewport(value)}><Icon size={16}/></button>;
                 })}
-              </div>
-              {!preview ? (
-                <IconButton
-                  label="ประวัติการแก้ไข"
-                  onClick={() => setHistoryOpen(true)}
-                >
-                  <History size={16} />
-                </IconButton>
-              ) : null}
+              </div> : null}
               {!preview ? <AccessControlButton level={pageId === "home" ? "PUBLIC" : accessLevel} disabled={pageId === "home"} onClick={() => setAccessDialogOpen(true)}/> : null}
             </div>
           </header>
           <div className="page-builder-workspace">
             <main className="builder-canvas-wrap">
+              {!preview && showDraftNotice ? (
+                <section className="splash-draft-notice" aria-live="polite">
+                  <div>
+                    <strong>{hasChanges ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : hasUnpublishedChanges ? "มีร่างที่บันทึกแล้ว ยังไม่ได้เผยแพร่" : "บันทึกร่างแล้ว ยังไม่ได้เผยแพร่"}</strong>
+                    {hasUnpublishedChanges || pageStatus === "draft" ? <p>{pageStatus === "published" ? "หน้าเว็บไซต์ยังแสดงฉบับเดิม" : "หน้านี้ยังไม่แสดงบนเว็บไซต์"}</p> : null}
+                  </div>
+                  {hasUnpublishedChanges ? (
+                    <button type="button" disabled={saveState === "saving"} onClick={() => setConfirm("discard")}>
+                      <RotateCcw size={16}/>ยกเลิกร่างที่บันทึก
+                    </button>
+                  ) : null}
+                </section>
+              ) : null}
               <div
                 className={`builder-viewport is-${viewport}`}
                 style={{ maxWidth: viewports[viewport] }}
               >
                 <div className={`builder-page ${preview ? "preview-mode" : "edit-mode"}`}>
+                  {preview ? <div className="builder-canvas">
+                    {pageId === "home" ? <PublicHome page={page} initialDocumentPages={{}} /> : <PublicContentPage page={page} initialDocumentPages={{}} />}
+                  </div> :
                   <Droppable droppableId="canvas" type="block">
                     {(provided, snapshot) => (
                       <div
@@ -693,7 +712,7 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
                                   id={`builder-block-${block.id}`}
                                   ref={drag.innerRef}
                                   {...drag.draggableProps}
-                                  className={`builder-block ${block.visibility === "hidden" ? "hidden-block" : ""} ${selected === block.id ? "selected" : ""} ${state.isDragging ? "dragging" : ""}`}
+                                  className={`builder-block ${block.visibility === "hidden" ? "hidden-block" : ""} ${!preview && selected === block.id ? "selected" : ""} ${state.isDragging ? "dragging" : ""}`}
                                 >
                                   {!preview ? (
                                     <div className="builder-block-actions">
@@ -766,6 +785,10 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
                                       <section className={blockContainerClassName(block)}>
                                         <TableCanvasEditor config={block.config} onChange={(config) => updateBlock({ ...block, config })} />
                                       </section>
+                                    ) : !preview && block.type === "documentList" ? (
+                                      <section className={blockContainerClassName(block)}>
+                                        <DocumentListCanvasEditor config={block.config} onChange={(config) => updateBlock({ ...block, config })} />
+                                      </section>
                                     ) : (
                                       <BlockRenderer blocks={[block]} adminPreview={!preview} />
                                     )}
@@ -789,7 +812,7 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
                         {provided.placeholder}
                       </div>
                     )}
-                  </Droppable>
+                  </Droppable>}
                 </div>
               </div>
             </main>
@@ -817,25 +840,21 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
                   <Layers size={17}/><span className="news-toolbar-label">บล็อกทั้งหมด</span><span className="news-editor-toolbar-count">{page.blocks.length}</span>
                 </button>
               ) : null}
-              <button type="button" aria-label={preview ? "ออกจากตัวอย่าง" : "ดูตัวอย่าง"} title={preview ? "ออกจากตัวอย่าง" : "ดูตัวอย่าง"} onClick={() => setPreview((value) => !value)}>
+              <button type="button" aria-label={preview ? "ออกจากตัวอย่าง" : "ดูตัวอย่าง"} title={preview ? "ออกจากตัวอย่าง" : "ดูตัวอย่าง"} onClick={() => { if (preview) setViewport("desktop"); setPreview((value) => !value); }}>
                 <Eye size={17}/><span className="news-toolbar-label">{preview ? "ออกจากตัวอย่าง" : "ดูตัวอย่าง"}</span>
               </button>
             </div>
             <div className="news-editor-toolbar-actions">
-              {hasUnpublishedChanges ? (
-                <button type="button" className="news-discard-draft" aria-label="ยกเลิกร่าง" title="ยกเลิกร่าง" disabled={saveState === "saving"} onClick={() => setConfirm("discard")}>
-                  <Trash2 size={16}/><span className="news-toolbar-label">ยกเลิกร่าง</span>
-                </button>
-              ) : null}
               <button type="button" className="builder-save" aria-label="บันทึกร่าง" title="บันทึกร่าง" disabled={saveState === "saving" || !hasChanges} onClick={() => persist(false)}>
                 <Save size={16}/><span className="news-toolbar-label">บันทึกร่าง</span>
               </button>
-              <button type="button" className="builder-publish primary-button" aria-label="เผยแพร่" title="เผยแพร่" disabled={saveState === "saving" || (pageStatus === "published" && !hasChanges && !hasUnpublishedChanges)} onClick={() => setConfirm("publish")}>
-                <Send size={16}/><span className="news-toolbar-label">เผยแพร่</span>
-              </button>
+              <div className="admin-publish-split">
+                <button type="button" className="builder-publish primary-button" aria-label="เผยแพร่" title="เผยแพร่" disabled={saveState === "saving" || (pageStatus === "published" && !hasChanges && !hasUnpublishedChanges)} onClick={() => setConfirm("publish")}><Send size={16}/><span className="news-toolbar-label">เผยแพร่</span></button>
+                {pageStatus === "published" ? <PublishDropdown disabled={saveState === "saving"} onUnpublish={() => setConfirm("unpublish")}/> : null}
+              </div>
             </div>
           </div>
-          {accessDialogOpen ? <AccessControlDialog initialLevel={accessLevel} initialGrants={accessGrants} options={accessOptions} onClose={() => setAccessDialogOpen(false)} onSave={(level, grants) => { if (level !== accessLevel || JSON.stringify(grants) !== JSON.stringify(accessGrants)) { setAccessLevel(level); setAccessGrants(grants); setAccessDirty(true); setSaveState("unsaved"); } }}/> : null}
+          {accessDialogOpen ? <AccessControlDialog initialLevel={accessLevel} initialGrants={accessGrants} options={accessOptions} onClose={() => setAccessDialogOpen(false)} onSave={(level, grants) => { if (level !== accessLevel || JSON.stringify(grants) !== JSON.stringify(accessGrants)) { setAccessLevel(level); setAccessGrants(grants); setSaveState("unsaved"); } }}/> : null}
           <InsertBlockModal
             open={insertAt !== null}
             onClose={() => setInsertAt(null)}
@@ -890,6 +909,7 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
               persist(true);
             }}
           /> : null}
+          {confirm === "unpublish" ? <SystemConfirmDialog title="ยกเลิกเผยแพร่หน้าเว็บไซต์?" description={`หน้า ${page.title} จะไม่แสดงบนเว็บไซต์ การแก้ไขที่ยังไม่ได้บันทึกจะหายไป`} confirmLabel="ยกเลิกเผยแพร่" pending={saveState === "saving"} onClose={() => setConfirm(null)} onConfirm={() => { void unpublish(); }}/> : null}
           {confirm === "discard" ? <SystemConfirmDialog
             title="ยกเลิกร่างที่บันทึกไว้?"
             description="การแก้ไขในร่างจะถูกลบ และกลับไปใช้เนื้อหาฉบับที่เผยแพร่อยู่ เว็บไซต์จะไม่เปลี่ยนแปลง"
@@ -904,10 +924,6 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
             onClose={() => setConfirm(null)}
             onConfirm={() => router.push("/admin/pages")}
           /> : null}
-          <RevisionHistory
-            open={historyOpen}
-            onClose={() => setHistoryOpen(false)}
-          />
         </div>
       </DragDropContext>
     </>
@@ -958,17 +974,6 @@ function PageBlockLayers({ blocks, selectedId, draftLabels, onSelect, onClose }:
   </dialog>;
 }
 
-function SaveLabel({ state, hasDraft }: { state: SaveState; hasDraft: boolean }) {
-  if (state === "saved")
-    return (
-      <span className="save-saved">
-        {hasDraft ? <FilePenLine size={11}/> : <CircleCheck size={11}/>} 
-        {hasDraft ? "บันทึกร่างแล้ว" : "เผยแพร่ล่าสุดแล้ว"}
-      </span>
-    );
-  if (state === "saving") return <span>กำลังบันทึก…</span>;
-  return <span className="save-unsaved">● มีการแก้ไข</span>;
-}
 function IconButton({
   label,
   onClick,
@@ -1017,7 +1022,8 @@ function PageSettingsPanel({ page, onChange, onClose, onPickImage }: {
   onClose: () => void;
   onPickImage: () => void;
 }) {
-  const media = getDemoMediaItem(page.header.imageId);
+  const [confirmRemoveImage, setConfirmRemoveImage] = useState(false);
+  const media = displayMediaFor(page.header, "imageId");
   return <div className="block-settings-layer page-settings-layer">
     <button
       type="button"
@@ -1051,11 +1057,19 @@ function PageSettingsPanel({ page, onChange, onClose, onPickImage }: {
             <Field label="ข้อความกำกับ"><input maxLength={100} value={page.header.eyebrow} placeholder="เช่น บริการโรงพยาบาล" onChange={(event) => onChange({ eyebrow: event.target.value })}/></Field>
             <Field label="หัวข้อ"><input maxLength={300} value={page.header.title} placeholder={page.title} onChange={(event) => onChange({ title: event.target.value })}/></Field>
             <Field label="คำอธิบาย"><textarea rows={3} maxLength={500} value={page.header.description} placeholder="คำอธิบายสั้น ๆ ของหน้านี้" onChange={(event) => onChange({ description: event.target.value })}/></Field>
-            <div className={`page-header-image-picker${media ? " has-image" : ""}`}>
-              <div style={mediaPreviewStyle(media)}>{media ? null : <ImageIcon size={23}/>}</div>
-              <span>{media?.name ?? "ยังไม่ได้เลือกรูปภาพ"}</span>
-              <button type="button" onClick={onPickImage}>{media ? "เปลี่ยนรูป" : "เลือกรูป"}</button>
-              {media ? <button type="button" className="danger" onClick={() => onChange({ imageId: null })}>ลบรูป</button> : null}
+            <div className="page-header-image-field">
+              <div className="page-header-image-heading">
+                <strong>รูปภาพส่วนหัว</strong>
+                <small>ภาพพื้นหลังของส่วนหัวหน้า</small>
+              </div>
+              <div className={`page-header-image-preview${media ? " has-image" : ""}`} style={mediaPreviewStyle(media)}>
+                {media ? null : <><ImageIcon size={25}/><span>ยังไม่ได้เลือกรูปภาพ</span></>}
+              </div>
+              {media ? <span className="page-header-image-name" title={media.name}>{media.name}</span> : null}
+              <div className="page-header-image-actions">
+                <button type="button" onClick={onPickImage}><ImageIcon size={16}/>{media ? "เปลี่ยนรูป" : "เลือกรูปจากคลังสื่อ"}</button>
+                {media ? <button type="button" className="danger" onClick={() => setConfirmRemoveImage(true)}><Trash2 size={16}/>ลบรูป</button> : null}
+              </div>
             </div>
           </> : null}
           {page.header.mode === "hidden" ? <p className="dynamic-note">หน้าเว็บจะเริ่มจาก Block แรกโดยไม่มีส่วนหัวประจำหน้า</p> : null}
@@ -1063,6 +1077,16 @@ function PageSettingsPanel({ page, onChange, onClose, onPickImage }: {
       </section>
     </div>
     </aside>
+    {confirmRemoveImage ? <SystemConfirmDialog
+      title="ลบรูปภาพส่วนหัว?"
+      description="รูปภาพจะถูกนำออกจากส่วนหัวของหน้านี้เมื่อบันทึกการเปลี่ยนแปลง ไฟล์ในคลังสื่อยังคงอยู่"
+      confirmLabel="ลบรูป"
+      onClose={() => setConfirmRemoveImage(false)}
+      onConfirm={() => {
+        onChange({ imageId: null });
+        setConfirmRemoveImage(false);
+      }}
+    /> : null}
   </div>;
 }
 
@@ -1323,7 +1347,7 @@ function SingleBannerSettings({
 }) {
   const config = block.config;
   const [picker, setPicker] = useState(false);
-  const media = getDemoMediaItem(config.imageId);
+  const media = displayMediaFor(config, "imageId");
   const update = (patch: Partial<typeof config>) =>
     onChange({ ...block, config: { ...config, ...patch } });
 
@@ -1360,10 +1384,11 @@ function SingleBannerSettings({
         value={config.height}
         onChange={(height) => update({ height })}
       />
-      <MediaField mediaId={config.imageId} onPick={() => setPicker(true)} />
+      <MediaField mediaId={config.imageId} source={config} onPick={() => setPicker(true)} />
       {media ? (
         <BannerFocalSetting
           mediaId={config.imageId}
+          source={config}
           focalPoint={config.focalPoint}
           onChange={(focalPoint) => update({ focalPoint })}
         />
@@ -1435,7 +1460,7 @@ function BannerSliderSettings({
         slides: [
           ...config.slides,
           {
-            id: crypto.randomUUID(),
+            id: createId(),
             title: "หัวข้อแบนเนอร์ใหม่",
             description: "เพิ่มรายละเอียดของแบนเนอร์",
             imageId: null,
@@ -1464,7 +1489,7 @@ function BannerSliderSettings({
         ? [
             ...config.slides,
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "หัวข้อแบนเนอร์ใหม่",
               description: "เพิ่มรายละเอียดของแบนเนอร์",
               imageId: null,
@@ -1623,6 +1648,7 @@ function BannerSliderSettings({
                         <div className="news-tab-settings-body">
                           <BannerImageFrameEditor
                             mediaId={slide.imageId}
+                            source={slide}
                             focalPoint={slide.focalPoint}
                             zoom={slide.zoom ?? 100}
                             onChange={(value) => updateSlide(slide.id, value)}
@@ -1714,19 +1740,20 @@ function BannerSliderSettings({
   );
 }
 function BannerImageFrameEditor({
-  mediaId,
+  source,
   focalPoint,
   zoom,
   onChange,
   onPick,
 }: {
   mediaId: string | null;
+  source: unknown;
   focalPoint: { x: number; y: number };
   zoom: number;
   onChange: (value: { focalPoint?: { x: number; y: number }; zoom?: number }) => void;
   onPick: () => void;
 }) {
-  const media = getDemoMediaItem(mediaId);
+  const media = displayMediaFor(source, "imageId");
   const drag = useRef<{ id: number; x: number; y: number; focus: { x: number; y: number } } | null>(null);
   const clamp = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
   function startDrag(event: PointerEvent<HTMLDivElement>) {
@@ -1780,12 +1807,13 @@ function BannerImageFrameEditor({
   );
 }
 
-function BannerFocalSetting({ mediaId, focalPoint, onChange }: {
+function BannerFocalSetting({ source, focalPoint, onChange }: {
   mediaId: string | null;
+  source: unknown;
   focalPoint: { x: number; y: number };
   onChange: (value: { x: number; y: number }) => void;
 }) {
-  const media = getDemoMediaItem(mediaId);
+  const media = displayMediaFor(source, "imageId");
   function move(event: PointerEvent<HTMLDivElement>) {
     if (event.type === "pointermove" && event.buttons !== 1) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1812,7 +1840,7 @@ function ImageBlockSettings({
 }) {
   const [picker, setPicker] = useState(false);
   const entityTargets = useLinkEntityTargets();
-  const media = getDemoMediaItem(block.config.mediaId);
+  const media = displayMediaFor(block.config);
   return (
     <>
       <div className="block-display-settings image-presentation-settings">
@@ -1826,7 +1854,7 @@ function ImageBlockSettings({
           ]}
         />
       </div>
-      <MediaField mediaId={block.config.mediaId} onPick={() => setPicker(true)} previewFit="contain" className="image-block-media-field" />
+      <MediaField mediaId={block.config.mediaId} source={block.config} onPick={() => setPicker(true)} previewFit="contain" className="image-block-media-field" />
       <Field label="หัวข้อ">
         <input
           value={block.config.title}
@@ -1963,6 +1991,7 @@ function ImageTextSettings({
     <>
       <MediaField
         mediaId={block.config.imageId}
+        source={block.config}
         onPick={() => setPicker(true)}
       />
       <Field label="หัวเรื่อง">
@@ -2495,7 +2524,7 @@ function ServiceGroupsSettings({ block, onChange }: {
       ]}/>
     </div>
     <div className="service-group-settings">
-      <div className="slider-settings-bar"><strong>หมวดบริการ ({config.groups.length}/6)</strong><button type="button" disabled={config.groups.length >= 6} onClick={() => patch({ groups: [...config.groups, { id: crypto.randomUUID(), title: "หมวดบริการใหม่", icon: "heart-pulse", accent: "primary", items: [] }] })}><Plus size={13}/>เพิ่มหมวด</button></div>
+      <div className="slider-settings-bar"><strong>หมวดบริการ ({config.groups.length}/6)</strong><button type="button" disabled={config.groups.length >= 6} onClick={() => patch({ groups: [...config.groups, { id: createId(), title: "หมวดบริการใหม่", icon: "heart-pulse", accent: "primary", items: [] }] })}><Plus size={13}/>เพิ่มหมวด</button></div>
       {config.groups.map((group, groupIndex) => <details key={group.id}>
         <summary><span>หมวด {groupIndex + 1}</span><span>{group.title}</span><ChevronDown size={15}/></summary>
         <div className="service-group-settings-body">
@@ -2508,7 +2537,7 @@ function ServiceGroupsSettings({ block, onChange }: {
               { value: "accent", label: "สีเน้น", caption: "สีเน้น", icon: <span className="block-accent-icon accent"/> },
             ]}/>
           </div>
-          <div className="slider-settings-bar"><strong>รายการลิงก์ ({group.items.length}/8)</strong><button type="button" disabled={group.items.length >= 8} onClick={() => updateGroup(group.id, { items: [...group.items, { id: crypto.randomUUID(), label: "ลิงก์ใหม่", target: { kind: "module", module: "home" }, openInNewTab: false }] })}><Plus size={13}/>เพิ่มลิงก์</button></div>
+          <div className="slider-settings-bar"><strong>รายการลิงก์ ({group.items.length}/8)</strong><button type="button" disabled={group.items.length >= 8} onClick={() => updateGroup(group.id, { items: [...group.items, { id: createId(), label: "ลิงก์ใหม่", target: { kind: "module", module: "home" }, openInNewTab: false }] })}><Plus size={13}/>เพิ่มลิงก์</button></div>
           <Droppable droppableId={`service-links:${block.id}:${group.id}`} type="service-link">
             {(provided) => <div className="service-link-sortable" ref={provided.innerRef} {...provided.droppableProps}>
               {group.items.map((item, itemIndex) => <Draggable draggableId={`service-link:${item.id}`} index={itemIndex} key={item.id}>
@@ -2631,7 +2660,7 @@ function LinkCardsSettings({
                 items: [
                   ...config.items,
                   {
-                    id: crypto.randomUUID(),
+                    id: createId(),
                     title: "บริการใหม่",
                     description: "",
                     visual: { kind: "icon", icon: "stethoscope" },
@@ -2655,7 +2684,7 @@ function LinkCardsSettings({
         {config.items.map((item, index) => {
           const media =
             item.visual.kind === "image"
-              ? getDemoMediaItem(item.visual.mediaId)
+              ? displayMediaFor(item.visual)
               : null;
           return (
             <Draggable draggableId={`link-card-${item.id}`} index={index} key={item.id}>
@@ -2719,6 +2748,7 @@ function LinkCardsSettings({
                   /> : (
                   media ? <LinkCardImageEditor
                     mediaId={item.visual.mediaId}
+                    source={item.visual}
                     focalPoint={item.visual.focalPoint}
                     zoom={item.visual.zoom}
                     onPick={() => setPickerId(item.id)}
@@ -2803,14 +2833,15 @@ function LinkCardsSettings({
     </>
   );
 }
-function LinkCardImageEditor({ mediaId, focalPoint, zoom, onChange, onPick }: {
+function LinkCardImageEditor({ source, focalPoint, zoom, onChange, onPick }: {
   mediaId: string | null;
+  source: unknown;
   focalPoint: { x: number; y: number };
   zoom: number;
   onChange: (change: { focalPoint?: { x: number; y: number }; zoom?: number }) => void;
   onPick: () => void;
 }) {
-  const media = getDemoMediaItem(mediaId);
+  const media = displayMediaFor(source);
   const drag = useRef<{ id: number; x: number; y: number; focus: { x: number; y: number } } | null>(null);
   const clamp = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -2933,7 +2964,7 @@ function GallerySettings({
       </> : null}
       <div className="gallery-settings-list">
         {block.config.images.map((image, index) => {
-          const media = getDemoMediaItem(image.mediaId);
+          const media = displayMediaFor(image);
           return (
             <div key={image.mediaId}>
               <span style={mediaPreviewStyle(media)} />
@@ -3046,7 +3077,7 @@ function PdfViewerSettings({ block, onChange, hideAlignment = false }: {
   const [picker, setPicker] = useState(false);
   const update = (patch: Partial<typeof block.config>) =>
     onChange({ ...block, config: { ...block.config, ...patch } });
-  const media = getDemoMediaItem(block.config.mediaId);
+  const media = displayMediaFor(block.config);
   return <div className="slider-settings pdf-viewer-settings">
     <Field label="หัวข้อ Block"><input value={block.config.title} maxLength={160} placeholder="เช่น เอกสารประกอบ" onChange={(event) => update({ title: event.target.value })}/></Field>
     <Field label="ไฟล์ PDF">
@@ -3077,7 +3108,7 @@ function DownloadsSettings({ block, onChange }: {
     <Field label="หัวข้อ Block"><input value={block.config.title ?? ""} maxLength={160} placeholder="เช่น เอกสารที่เกี่ยวข้อง" onChange={(event) => onChange({ ...block, config: { ...block.config, title: event.target.value } })}/></Field>
     <div className="attachment-settings-list">
       {block.config.files.map((file) => {
-        const media = getDemoMediaItem(file.mediaId);
+        const media = displayMediaFor(file);
         const inputId = `attachment-label-${block.id}-${file.mediaId}`;
         return <div className="attachment-settings-item" key={file.mediaId}>
           <div className="attachment-settings-file">
@@ -3095,6 +3126,70 @@ function DownloadsSettings({ block, onChange }: {
   </div>;
 }
 
+function DocumentListCanvasTextarea({ value, onChange, placeholder, label }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.style.height = "auto";
+    ref.current.style.height = `${ref.current.scrollHeight}px`;
+  }, [value]);
+  return <textarea ref={ref} rows={1} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={label} />;
+}
+
+export function DocumentListCanvasEditor({ config, onChange }: {
+  config: BlockConfigMap["documentList"];
+  onChange: (config: BlockConfigMap["documentList"]) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const update = (patch: Partial<typeof config>) => onChange({ ...config, ...patch });
+  const updateItemLabel = (id: string, label: string) => update({ items: config.items.map((item) => item.id === id ? { ...item, label } : item) });
+  const addItem = (source: (typeof config.items)[number]["source"], label: string) => update({ items: [...config.items, { id: createId(), level: 1, number: "", label, source }] });
+  const counters = [0, 0, 0];
+
+  return <div className="document-list-canvas-editor">
+    {config.title || config.description ? <header className="document-list-canvas-heading">
+      {config.title ? <h2 className={`size-${config.headingSize ?? "standard"}`}>{config.title}</h2> : null}
+      {config.description ? <p>{config.description}</p> : null}
+    </header> : null}
+    <div className="document-list-canvas-items">
+      {config.items.map((item, index) => {
+        const levelIndex = item.level - 1;
+        for (let parent = 0; parent < levelIndex; parent += 1) if (counters[parent] === 0) counters[parent] = 1;
+        counters[levelIndex] += 1;
+        for (let child = levelIndex + 1; child < counters.length; child += 1) counters[child] = 0;
+        const number = config.numbering === "automatic"
+          ? `${config.numberPrefix ? `${config.numberPrefix}.` : ""}${counters.slice(0, item.level).join(".")}`
+          : config.numbering === "manual" ? item.number : "";
+        const sourceLabel = item.source?.kind === "media"
+          ? `ไฟล์แนบ · ${displayMediaFor(item.source)?.name ?? "ยังไม่ได้เลือกไฟล์"}`
+          : item.source?.kind === "external" ? `ลิงก์ภายนอก · ${item.source.url || "ยังไม่ได้ระบุ URL"}` : "หัวข้อไม่มีลิงก์";
+        return <div className={`document-list-canvas-item level-${item.level}`} key={item.id}>
+          {number ? <span className="document-list-canvas-number">{number}</span> : null}
+          <div className="document-list-canvas-item-content">
+            <DocumentListCanvasTextarea value={item.label} onChange={(label) => updateItemLabel(item.id, label)} placeholder={`ชื่อรายการที่ ${index + 1}`} label={`ชื่อรายการที่ ${index + 1}`} />
+            <small>{sourceLabel}</small>
+          </div>
+        </div>;
+      })}
+      {config.items.length === 0 ? <p className="document-list-canvas-empty">ยังไม่มีรายการเอกสาร เพิ่มรายการเพื่อเริ่มพิมพ์ได้เลย</p> : null}
+    </div>
+    <div className="document-list-canvas-actions">
+      <button type="button" disabled={config.items.length >= 30} onClick={() => addItem(null, "")}><Plus size={15} />เพิ่มหัวข้อ</button>
+      <button type="button" disabled={config.items.length >= 30} onClick={() => setPickerOpen(true)}><Paperclip size={15} />เพิ่มไฟล์</button>
+      <button type="button" disabled={config.items.length >= 30} onClick={() => addItem({ kind: "external", url: "https://" }, "")}><Link2 size={15} />เพิ่ม URL</button>
+    </div>
+    {pickerOpen ? <MediaPicker open acceptKind="document" currentId={null} onClose={() => setPickerOpen(false)} onSelect={(item) => {
+      addItem({ kind: "media", mediaId: item.id }, item.name.replace(/\.[^.]+$/, ""));
+      setPickerOpen(false);
+    }} /> : null}
+  </div>;
+}
+
 function DocumentListSettings({ block, onChange }: {
   block: Extract<BuilderBlock, { type: "documentList" }>;
   onChange: (block: BuilderBlock) => void;
@@ -3106,20 +3201,21 @@ function DocumentListSettings({ block, onChange }: {
   const update = (patch: Partial<typeof config>) => onChange({ ...block, config: { ...config, ...patch } });
   const updateItem = (id: string, patch: Partial<(typeof config.items)[number]>) =>
     update({ items: config.items.map((entry) => entry.id === id ? { ...entry, ...patch } : entry) });
-  const addExternal = () => update({ items: [...config.items, { id: crypto.randomUUID(), level: 1, number: "", label: "ชื่อเอกสาร", source: { kind: "external", url: "https://" } }] });
+  const addExternal = () => update({ items: [...config.items, { id: createId(), level: 1, number: "", label: "ชื่อเอกสาร", source: { kind: "external", url: "https://" } }] });
   return <div className="slider-settings">
     <Field label="หัวข้อชุดเอกสาร"><input value={config.title} onChange={(event) => update({ title: event.target.value })}/></Field>
     <Field label="คำอธิบาย"><textarea rows={2} value={config.description} onChange={(event) => update({ description: event.target.value })}/></Field>
+    <p className="block-inline-edit-hint">ชื่อรายการแก้ได้ทั้งในตั้งค่าและบนบล็อก</p>
     <Field label="การแสดงเลขข้อ"><NativeSelect value={config.numbering} onChange={(event) => update({ numbering: event.target.value as typeof config.numbering })}><option value="automatic">เรียงเลขอัตโนมัติ</option><option value="manual">กำหนดเลขเอง</option><option value="none">ไม่แสดงเลขข้อ</option></NativeSelect></Field>
     {config.numbering === "automatic" ? <Field label="เลขหัวข้อหลัก"><input value={config.numberPrefix} onChange={(event) => update({ numberPrefix: event.target.value })}/></Field> : null}
-    <div className="document-list-setting-actions"><button type="button" disabled={config.items.length >= 30} onClick={() => { setReplaceItemId(null); setPicker(true); }}><Paperclip size={14}/>เพิ่มไฟล์</button><button type="button" disabled={config.items.length >= 30} onClick={addExternal}><Plus size={14}/>เพิ่ม URL</button><button type="button" disabled={config.items.length >= 30} onClick={() => update({ items: [...config.items, { id: crypto.randomUUID(), level: 1, number: "", label: "หัวข้อ", source: null }] })}><Plus size={14}/>เพิ่มหัวข้อไม่มีลิงก์</button></div>
+    <div className="document-list-setting-actions"><button type="button" disabled={config.items.length >= 30} onClick={() => { setReplaceItemId(null); setPicker(true); }}><Paperclip size={14}/>เพิ่มไฟล์</button><button type="button" disabled={config.items.length >= 30} onClick={addExternal}><Plus size={14}/>เพิ่ม URL</button><button type="button" disabled={config.items.length >= 30} onClick={() => update({ items: [...config.items, { id: createId(), level: 1, number: "", label: "หัวข้อ", source: null }] })}><Plus size={14}/>เพิ่มหัวข้อไม่มีลิงก์</button></div>
     <Droppable droppableId={`document-list-items-${block.id}`} type="document-list-item">
       {(provided) => <div className="document-list-settings" ref={provided.innerRef} {...provided.droppableProps}>
       {config.items.map((item, index) => <Draggable draggableId={`document-list-item-${item.id}`} index={index} key={item.id}>
         {(drag, snapshot) => <details ref={drag.innerRef} {...drag.draggableProps} className={`document-list-item-setting${snapshot.isDragging ? " dragging" : ""}`}>
-        <summary className="document-list-item-heading"><span className="document-list-item-drag" {...drag.dragHandleProps} onClick={(event) => event.preventDefault()} aria-label="ลากเพื่อจัดลำดับรายการเอกสาร" title="ลากเพื่อจัดลำดับ"><GripVertical size={17}/></span><strong>รายการที่ {index + 1}</strong><ChevronDown size={16}/></summary>
+        <summary className="document-list-item-heading"><span className="document-list-item-drag" {...drag.dragHandleProps} onClick={(event) => event.preventDefault()} aria-label="ลากเพื่อจัดลำดับรายการเอกสาร" title="ลากเพื่อจัดลำดับ"><GripVertical size={17}/></span><strong>{index + 1}. {item.label || "ยังไม่มีชื่อรายการ"}</strong><ChevronDown size={16}/></summary>
         <div className="document-list-item-body">
-        <Field label="ชื่อรายการ"><textarea rows={5} value={item.label} onChange={(event) => updateItem(item.id, { label: event.target.value })}/></Field>
+        <Field label="ชื่อรายการ"><textarea rows={3} value={item.label} onChange={(event) => updateItem(item.id, { label: event.target.value })}/></Field>
         <div className="document-list-item-row">
           <Field label="ระดับรายการ"><NativeSelect value={item.level} onChange={(event) => updateItem(item.id, { level: Number(event.target.value) as typeof item.level })}><option value={1}>หัวข้อหลัก</option><option value={2}>หัวข้อย่อย</option><option value={3}>หัวข้อย่อยระดับ 3</option></NativeSelect></Field>
           {config.numbering === "manual" ? <Field label="เลขข้อ"><input value={item.number} placeholder="เช่น 1.1" onChange={(event) => updateItem(item.id, { number: event.target.value })}/></Field> : null}
@@ -3129,7 +3225,7 @@ function DocumentListSettings({ block, onChange }: {
           updateItem(item.id, { source: kind === "external" ? { kind: "external", url: "https://" } : kind === "media" ? { kind: "media", mediaId: "" } : null });
         }}><option value="media">ไฟล์ในคลังสื่อ</option><option value="external">URL ภายนอก</option><option value="none">หัวข้อไม่มีลิงก์</option></NativeSelect></Field>
         {item.source?.kind === "external" ? <Field label="URL"><input type="url" value={item.source.url} placeholder="https://example.com/document" onChange={(event) => updateItem(item.id, { source: { kind: "external", url: event.target.value } })}/></Field> : null}
-        {item.source?.kind === "media" ? <div className="document-list-media-setting"><span>{getDemoMediaItem(item.source.mediaId)?.name ?? "ยังไม่ได้เลือกไฟล์"}</span><button type="button" onClick={() => { setReplaceItemId(item.id); setPicker(true); }}><Paperclip size={14}/>เลือกไฟล์</button></div> : null}
+        {item.source?.kind === "media" ? <div className="document-list-media-setting"><span>{displayMediaFor(item.source)?.name ?? "ยังไม่ได้เลือกไฟล์"}</span><button type="button" onClick={() => { setReplaceItemId(item.id); setPicker(true); }}><Paperclip size={14}/>เลือกไฟล์</button></div> : null}
         <button type="button" className="remove-slide" onClick={() => update({ items: config.items.filter((entry) => entry.id !== item.id) })}><Trash2 size={14}/>ลบรายการ</button>
         </div>
       </details>}
@@ -3137,7 +3233,7 @@ function DocumentListSettings({ block, onChange }: {
       {provided.placeholder}
     </div>}
     </Droppable>
-    {picker ? <MediaPicker open acceptKind="document" currentId={selectedSource?.kind === "media" ? selectedSource.mediaId : null} onClose={() => { setPicker(false); setReplaceItemId(null); }} onSelect={(item) => { if (replaceItemId) updateItem(replaceItemId, { source: { kind: "media", mediaId: item.id } }); else update({ items: [...config.items, { id: crypto.randomUUID(), level: 1, number: "", label: item.name.replace(/\.[^.]+$/, ""), source: { kind: "media", mediaId: item.id } }] }); setPicker(false); setReplaceItemId(null); }}/>: null}
+    {picker ? <MediaPicker open acceptKind="document" currentId={selectedSource?.kind === "media" ? selectedSource.mediaId : null} onClose={() => { setPicker(false); setReplaceItemId(null); }} onSelect={(item) => { if (replaceItemId) updateItem(replaceItemId, { source: { kind: "media", mediaId: item.id } }); else update({ items: [...config.items, { id: createId(), level: 1, number: "", label: item.name.replace(/\.[^.]+$/, ""), source: { kind: "media", mediaId: item.id } }] }); setPicker(false); setReplaceItemId(null); }}/>: null}
   </div>;
 }
 
@@ -3330,7 +3426,7 @@ function NewsTabsSettings({
               tabs: [
                 ...config.tabs,
                 {
-                  id: crypto.randomUUID(),
+                  id: createId(),
                   label: "หมวดข่าวใหม่",
                   source: { kind: "all" },
                   categoryId: null,
@@ -3437,6 +3533,7 @@ function DocumentTabsSettings({
 }) {
   const config = block.config;
   const [units, setUnits] = useState(() => readUnits());
+  const [documentYears, setDocumentYears] = useState<number[]>([]);
   useEffect(() => {
     const refresh = () => setUnits(readUnits());
     window.addEventListener("hos-units-change", refresh);
@@ -3444,6 +3541,17 @@ function DocumentTabsSettings({
       window.removeEventListener("hos-units-change", refresh);
     };
   }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchPublicDocumentPage({ page: 1, search: "", category: "all", unit: "all", year: "all" }, controller.signal)
+      .then((result) => setDocumentYears(result.years))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  const yearOptions = Array.from(new Set([
+    ...documentYears,
+    ...config.tabs.flatMap((tab) => typeof tab.fiscalYear === "number" ? [tab.fiscalYear] : []),
+  ])).sort((left, right) => right - left);
   const patch = (change: Partial<typeof config>) =>
     onChange({ ...block, config: { ...config, ...change } });
   const updateTab = (
@@ -3461,10 +3569,11 @@ function DocumentTabsSettings({
       tabs: [
         ...config.tabs,
         {
-          id: crypto.randomUUID(),
+          id: createId(),
           label: "แท็บเอกสารใหม่",
           source: { kind: "all" },
           categoryId: null,
+          fiscalYear: "all",
         },
       ],
     });
@@ -3585,6 +3694,14 @@ function DocumentTabsSettings({
               showManageLink={false}
               onChange={(categoryId) => updateTab(tab.id, { categoryId })}
             />
+            <Field label="ปีงบประมาณ">
+              <NativeSelect value={String(tab.fiscalYear)} onChange={(event) => updateTab(tab.id, {
+                fiscalYear: event.target.value === "all" ? "all" : Number(event.target.value),
+              })}>
+                <option value="all">ทุกปีงบประมาณ</option>
+                {yearOptions.map((year) => <option value={year} key={year}>{year}</option>)}
+              </NativeSelect>
+            </Field>
             <button
               type="button"
               className="remove-slide"
@@ -3617,78 +3734,114 @@ function FaqSettings({
   block: Extract<BuilderBlock, { type: "faq" }>;
   onChange: (block: BuilderBlock) => void;
 }) {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
   return (
-    <div className="repeatable-settings">
-      {block.config.items.map((item, index) => (
-        <div key={index}>
-          <Field label={`คำถาม ${index + 1}`}>
-            <input
-              value={item.question}
-              onChange={(event) =>
-                onChange({
-                  ...block,
-                  config: {
-                    items: block.config.items.map((value, itemIndex) =>
-                      itemIndex === index
-                        ? { ...value, question: event.target.value }
-                        : value,
-                    ),
-                  },
-                })
-              }
-            />
-          </Field>
-          <Field label="คำตอบ">
-            <SecondaryRichTextEditor
-              value={item.answer}
-              onChange={(answer) =>
-                onChange({
-                  ...block,
-                  config: {
-                    items: block.config.items.map((value, itemIndex) =>
-                      itemIndex === index ? { ...value, answer } : value,
-                    ),
-                  },
-                })
-              }
-            />
-          </Field>
-          <button
-            className="remove-slide"
-            onClick={() =>
-              onChange({
-                ...block,
-                config: {
-                  items: block.config.items.filter(
-                    (_, itemIndex) => itemIndex !== index,
-                  ),
-                },
-              })
-            }
-          >
-            <Trash2 size={13} />
-            ลบ
-          </button>
-        </div>
-      ))}
-      <button
-        onClick={() =>
-          onChange({
-            ...block,
-            config: {
-              items: [
-                ...block.config.items,
-                { question: "คำถามใหม่", answer: "เพิ่มคำตอบ" },
-              ],
-            },
-          })
-        }
-        disabled={block.config.items.length >= 12}
-      >
-        <Plus size={13} />
-        เพิ่มคำถาม
-      </button>
-    </div>
+    <>
+      <Field label="หัวข้อ">
+        <input
+          value={block.config.title}
+          placeholder="เช่น คำถามที่พบบ่อย"
+          onChange={(event) => onChange({ ...block, config: { ...block.config, title: event.target.value } })}
+        />
+      </Field>
+      <Field label="คำอธิบาย">
+        <textarea
+          rows={3}
+          value={block.config.description}
+          placeholder="คำอธิบายสั้น ๆ ก่อนรายการคำถาม"
+          onChange={(event) => onChange({ ...block, config: { ...block.config, description: event.target.value } })}
+        />
+      </Field>
+      <div className="faq-settings-heading">
+        <strong>รายการคำถาม ({block.config.items.length}/12)</strong>
+        <button
+          type="button"
+          disabled={block.config.items.length >= 12}
+          onClick={() => {
+            setExpandedIndex(block.config.items.length);
+            onChange({
+              ...block,
+              config: {
+                ...block.config,
+                items: [...block.config.items, { question: "คำถามใหม่", answer: "" }],
+              },
+            });
+          }}
+        >
+          <Plus size={13} />
+          เพิ่มคำถาม
+        </button>
+      </div>
+      <div className="faq-settings-list">
+        {block.config.items.map((item, index) => (
+          <details key={index} open={expandedIndex === index}>
+            <summary
+              className="faq-setting-header"
+              onClick={(event) => {
+                event.preventDefault();
+                setExpandedIndex(expandedIndex === index ? null : index);
+              }}
+            >
+              <span className="faq-setting-number">{index + 1}</span>
+              <span className="faq-setting-preview">{item.question.trim() || `คำถามที่ ${index + 1}`}</span>
+              <ChevronDown size={15} aria-hidden="true" />
+            </summary>
+            <div className="faq-setting-body">
+              <Field label="คำถาม">
+                <input
+                  value={item.question}
+                  onChange={(event) =>
+                    onChange({
+                      ...block,
+                      config: {
+                        ...block.config,
+                        items: block.config.items.map((value, itemIndex) =>
+                          itemIndex === index ? { ...value, question: event.target.value } : value,
+                        ),
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="คำตอบ">
+                <SecondaryRichTextEditor
+                  value={item.answer}
+                  compact
+                  onChange={(answer) =>
+                    onChange({
+                      ...block,
+                      config: {
+                        ...block.config,
+                        items: block.config.items.map((value, itemIndex) =>
+                          itemIndex === index ? { ...value, answer } : value,
+                        ),
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <button
+                type="button"
+                className="remove-slide"
+                onClick={() => {
+                  setExpandedIndex((current) => current === index ? null : current !== null && current > index ? current - 1 : current);
+                  onChange({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      items: block.config.items.filter((_, itemIndex) => itemIndex !== index),
+                    },
+                  });
+                }}
+              >
+                <Trash2 size={13} />
+                ลบคำถาม
+              </button>
+            </div>
+          </details>
+        ))}
+      </div>
+    </>
   );
 }
 function AlertSettings({
@@ -3782,17 +3935,18 @@ function DividerSettings({
   );
 }
 function MediaField({
-  mediaId,
+  source,
   onPick,
   previewFit = "cover",
   className,
 }: {
   mediaId: string | null;
+  source: unknown;
   onPick: () => void;
   previewFit?: "cover" | "contain";
   className?: string;
 }) {
-  const media = getDemoMediaItem(mediaId);
+  const media = displayMediaFor(source, "imageId") ?? displayMediaFor(source);
   return (
     <div className={`banner-image-picker${media ? " has-image" : ""}${className ? ` ${className}` : ""}`}>
       <div className="banner-setting-preview" style={{ ...mediaPreviewStyle(media), backgroundSize: previewFit }}>
@@ -3909,9 +4063,7 @@ function BannerHeightField({
           <option value="tall">ทรงสูง 32:15 — 1920 × 900 พิกเซล</option>
         </NativeSelect>
       </Field>
-      <small className="banner-size-hint">
-        ภาพที่มีข้อความอยู่ในรูป แนะนำ “ภาพ 16:9” และรูปแบบ “เฉพาะภาพ”
-      </small>
+      
     </div>
   );
 }
@@ -3979,7 +4131,7 @@ function PositionSetting({ width, value, onChange }: { width: BuilderBlock["widt
   ] satisfies { value: BuilderBlock["position"]; label: string; caption: string; icon: ReactNode }[];
   return <div className="block-position-controls">
     <IconChoiceField label="ตำแหน่งบล็อก" value={normalizedValue} disabled={disabled} onChange={onChange} options={options.filter((option) => available.includes(option.value))}/>
-    {disabled ? <p className="block-display-hint">เต็มพื้นที่ — ไม่ต้องกำหนดตำแหน่งบล็อก</p> : null}
+    
   </div>;
 }
 
@@ -4107,49 +4259,6 @@ function InsertBlockModal({
             );
           })}
         </div>
-      </div>
-    </div>
-  );
-}
-function RevisionHistory({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="builder-modal-layer">
-      <button
-        className="builder-modal-backdrop"
-        onClick={onClose}
-        aria-label="ปิด"
-      />
-      <div className="revision-dialog" role="dialog" aria-modal="true">
-        <header>
-          <div>
-            <History size={18} />
-            <strong>ประวัติการแก้ไข</strong>
-          </div>
-          <button onClick={onClose}>
-            <X size={18} />
-          </button>
-        </header>
-        {[
-          { v: 3, date: "วันนี้ · 10:24", status: "เผยแพร่แล้ว" },
-          { v: 2, date: "เมื่อวานนี้ · 15:10", status: "ฉบับร่าง" },
-          { v: 1, date: "3 วันที่แล้ว · 09:00", status: "เผยแพร่แล้ว" },
-        ].map((item) => (
-          <article key={item.v}>
-            <span>v{item.v}</span>
-            <div>
-              <strong>แก้ไขโดย ผู้ดูแลระบบ</strong>
-              <small>{item.date}</small>
-            </div>
-            <i>{item.status}</i>
-          </article>
-        ))}
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ export function PublicAnnouncementEntry({ announcements, themeStyle }: {
   themeStyle: CSSProperties;
 }) {
   const pathname = usePathname();
-  const showAnnouncements = pathname !== "/" && !/^\/(?:admin|welcome|login|change-password|profile)(?:\/|$)/.test(pathname);
+  const showAnnouncements = !/^\/(?:admin|welcome|login|change-password|profile)(?:\/|$)/.test(pathname);
 
-  return <div style={{ display: "contents", ...themeStyle }}><PublicAnnouncementGate announcements={announcements} showAnnouncements={showAnnouncements} /></div>;
+  return <div style={{ display: "contents", ...themeStyle }}><PublicAnnouncementGate announcements={announcements} pathname={pathname} showAnnouncements={showAnnouncements} /></div>;
 }

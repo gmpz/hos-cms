@@ -1,4 +1,5 @@
 import type { DemoDocument } from "./model";
+import type { BlockConfigMap } from "@/features/pages/blocks/config/types";
 
 export const documentsChangeEvent = "hos-documents-change";
 
@@ -21,8 +22,15 @@ export type PublicDocumentPage = {
   categoryCounts: Record<string, number>;
 };
 
+export type PublicDocumentBlockPage = {
+  items: DemoDocument[];
+  page: number;
+  pageSize: number;
+  total: number;
+  selectedYear: number | null;
+};
+
 let publicDocuments: DemoDocument[] = [];
-let publicDocumentsLoaded = false;
 let adminDocuments: DemoDocument[] = [];
 let deletedDocuments: DemoDocument[] = [];
 
@@ -33,25 +41,18 @@ function isDocument(value: unknown): value is DemoDocument {
     "categoryId" in value && typeof value.categoryId === "string" &&
     "mediaIds" in value && Array.isArray(value.mediaIds) &&
     "openCount" in value && typeof value.openCount === "number" &&
-    "downloadCount" in value && typeof value.downloadCount === "number";
+    "downloadCount" in value && typeof value.downloadCount === "number" &&
+    "isNew" in value && typeof value.isNew === "boolean";
 }
 
 export function readDocuments(includeDrafts = false): DemoDocument[] {
   return (includeDrafts ? adminDocuments : publicDocuments) ?? [];
 }
 
-export function seedPublicDocuments(documents: DemoDocument[]): void {
-  if (!Array.isArray(documents)) return;
-  publicDocuments = documents;
-  publicDocumentsLoaded = true;
-}
-
-export function publicDocumentsAreLoaded(): boolean { return publicDocumentsLoaded; }
-
 export function readDeletedDocuments(): DemoDocument[] { return deletedDocuments; }
 
-export async function fetchAdminDocumentPage(options: { page: number; search: string; category: string; status: string; year: string; trash: boolean }, signal?: AbortSignal): Promise<DocumentPage> {
-  const params = new URLSearchParams({ page: String(options.page), search: options.search, category: options.category, status: options.status, year: options.year });
+export async function fetchAdminDocumentPage(options: { page: number; size: number; search: string; category: string; status: string; year: string; trash: boolean }, signal?: AbortSignal): Promise<DocumentPage> {
+  const params = new URLSearchParams({ page: String(options.page), size: String(options.size), search: options.search, category: options.category, status: options.status, year: options.year });
   if (options.trash) params.set("trash", "1");
   const response = await fetch(`/api/documents/admin-list?${params}`, { cache: "no-store", signal });
   const payload: unknown = await response.json();
@@ -80,6 +81,38 @@ export async function fetchPublicDocumentPage(options: { page: number; search: s
   return payload as PublicDocumentPage;
 }
 
+export async function fetchPublicDocumentBlockPage(options: {
+  page: number;
+  limit: number;
+  tab: BlockConfigMap["documents"]["tabs"][number];
+}, signal?: AbortSignal): Promise<PublicDocumentBlockPage> {
+  const { tab } = options;
+  const params = new URLSearchParams({
+    page: String(options.page), limit: String(options.limit),
+    source: tab.source.kind, year: String(tab.fiscalYear),
+  });
+  if (tab.categoryId) params.set("category", tab.categoryId);
+  if (tab.source.kind === "unit") params.set("unit", tab.source.unitId);
+  if (tab.source.kind === "selected") tab.source.documentIds.forEach((id) => params.append("id", id));
+  const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000);
+  let response: Response;
+  let payload: unknown;
+  try {
+    response = await fetch(`/api/documents/block-list?${params}`, { cache: "no-store", signal: requestSignal });
+    payload = await response.json();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("โหลดเอกสารนานเกินไป กรุณาลองอีกครั้ง");
+    throw error;
+  }
+  if (!response.ok) throw new Error(typeof payload === "object" && payload !== null && "error" in payload && typeof payload.error === "string" ? payload.error : "โหลดเอกสารไม่สำเร็จ");
+  if (typeof payload !== "object" || payload === null || !("items" in payload) || !Array.isArray(payload.items) || !payload.items.every(isDocument) ||
+    !("page" in payload) || typeof payload.page !== "number" || !("pageSize" in payload) || typeof payload.pageSize !== "number" ||
+    !("total" in payload) || typeof payload.total !== "number" || !("selectedYear" in payload) ||
+    (payload.selectedYear !== null && typeof payload.selectedYear !== "number"))
+    throw new Error("ข้อมูลรายการเอกสารไม่ถูกต้อง");
+  return payload as PublicDocumentBlockPage;
+}
+
 export async function refreshDeletedDocuments(): Promise<DemoDocument[]> {
   const response = await fetch("/api/documents?trash=1", { cache: "no-store" });
   if (!response.ok) throw new Error("โหลดถังขยะไม่สำเร็จ");
@@ -90,7 +123,7 @@ export async function refreshDeletedDocuments(): Promise<DemoDocument[]> {
   return payload;
 }
 
-export async function actOnDocument(document: DemoDocument, action: "unpublish" | "delete" | "restore"): Promise<void> {
+export async function actOnDocument(document: DemoDocument, action: "unpublish" | "delete" | "restore" | "purge"): Promise<void> {
   const response = await fetch(`/api/documents/${document.id}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -102,8 +135,16 @@ export async function actOnDocument(document: DemoDocument, action: "unpublish" 
       ? payload.error : "จัดการเอกสารไม่สำเร็จ");
   }
   const payload: unknown = await response.json();
-  if (typeof payload !== "object" || payload === null || !("document" in payload) || !isDocument(payload.document))
+  if (typeof payload !== "object" || payload === null || !("document" in payload) || (action === "purge" ? payload.document !== null : !isDocument(payload.document)))
     throw new Error("ข้อมูลเอกสารที่แก้ไขไม่ถูกต้อง");
+  if (action === "purge") {
+    adminDocuments = adminDocuments.filter((item) => item.id !== document.id);
+    deletedDocuments = deletedDocuments.filter((item) => item.id !== document.id);
+    publicDocuments = publicDocuments.filter((item) => item.id !== document.id);
+    window.dispatchEvent(new Event(documentsChangeEvent));
+    return;
+  }
+  if (!isDocument(payload.document)) throw new Error("ข้อมูลเอกสารที่แก้ไขไม่ถูกต้อง");
   const updated = payload.document;
   adminDocuments = action === "delete" ? adminDocuments.filter((item) => item.id !== document.id) : [updated, ...adminDocuments.filter((item) => item.id !== document.id)];
   deletedDocuments = action === "delete" ? [updated, ...deletedDocuments.filter((item) => item.id !== document.id)] : deletedDocuments.filter((item) => item.id !== document.id);
@@ -117,7 +158,7 @@ export async function refreshDocuments(includeDrafts = false): Promise<DemoDocum
   const payload: unknown = await response.json();
   if (!Array.isArray(payload) || !payload.every(isDocument)) throw new Error("ข้อมูลเอกสารไม่ถูกต้อง");
   if (includeDrafts) adminDocuments = payload;
-  else { publicDocuments = payload; publicDocumentsLoaded = true; }
+  else publicDocuments = payload;
   window.dispatchEvent(new Event(documentsChangeEvent));
   return payload;
 }

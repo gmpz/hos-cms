@@ -14,7 +14,6 @@ const extensionByMimeType: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
   "application/vnd.ms-powerpoint": "ppt",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
-  "video/mp4": "mp4",
 };
 
 async function canManageMedia() {
@@ -51,6 +50,8 @@ export async function GET(request: Request) {
   if (params.get("library") === "1") {
     const kind = params.get("kind") ?? "all";
     if (kind !== "all" && kind !== "image" && kind !== "document") return Response.json({ message: "ประเภทไฟล์ไม่ถูกต้อง" }, { status: 400 });
+    const size = params.get("size") ?? "10";
+    if (!["10", "20", "50"].includes(size)) return Response.json({ message: "จำนวนรายการต่อหน้าไม่ถูกต้อง" }, { status: 400 });
     const requestedPage = Number(params.get("page") ?? "1");
     if (!Number.isSafeInteger(requestedPage) || requestedPage < 1 || requestedPage > 100_000)
       return Response.json({ message: "หมายเลขหน้าไม่ถูกต้อง" }, { status: 400 });
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
       ...(kind !== "all" ? { kind: kind === "image" ? MediaKind.IMAGE : MediaKind.DOCUMENT } : {}),
       ...(search ? { name: { contains: search } } : {}),
     };
-    const limit = 20;
+    const limit = Number(size);
     const [items, total, groups] = await Promise.all([
       prisma.mediaAsset.findMany({ where, orderBy: [{ uploadedAt: "desc" }, { id: "desc" }], skip: (requestedPage - 1) * limit, take: limit }),
       prisma.mediaAsset.count({ where }),
@@ -94,8 +95,7 @@ export async function GET(request: Request) {
     const page = items.slice(0, limit);
     return Response.json({ items: page.map(mediaDto), nextCursor: hasMore ? page.at(-1)?.id ?? null : null }, { headers: { "Cache-Control": "no-store" } });
   }
-  const items = await prisma.mediaAsset.findMany({ orderBy: [{ uploadedAt: "desc" }, { id: "desc" }] });
-  return Response.json({ items: items.map(mediaDto) }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ message: "กรุณาระบุรายการไฟล์หรือใช้การแบ่งหน้า" }, { status: 400 });
 }
 
 export async function POST(request: Request) {

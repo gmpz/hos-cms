@@ -1,5 +1,5 @@
 import type { DemoMediaItem } from "./media-items";
-import { fetchMediaItemsByIds, fetchUploadedMediaItems, type UploadedMediaItem } from "../upload-media-file";
+import type { UploadedMediaItem } from "../upload-media-file";
 
 export const mediaChangeEvent = "hos-cms:demo:media-change";
 
@@ -16,8 +16,6 @@ export class MediaInUseError extends Error {
 }
 
 let items: DemoMediaItem[] = [];
-let loaded = false;
-let pending: Promise<void> | null = null;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -51,10 +49,10 @@ export function getDemoMediaItems(): DemoMediaItem[] {
 
 export function seedDemoMediaItems(rows: UploadedMediaItem[]): void {
   if (!Array.isArray(rows)) return;
-  const known = new Set(items.map((item) => item.id));
-  const additions = rows.filter((row) => !known.has(row.id)).map(toDemoMediaItem);
-  if (additions.length) items = [...items, ...additions];
-  loaded = true;
+  if (!rows.length) return;
+  const updated = new Map(items.map((item) => [item.id, item]));
+  rows.forEach((row) => updated.set(row.id, toDemoMediaItem(row)));
+  items = [...updated.values()];
 }
 
 export function addUploadedMediaItem(item: DemoMediaItem): void {
@@ -64,27 +62,6 @@ export function addUploadedMediaItem(item: DemoMediaItem): void {
 
 export function getDemoMediaItem(id: string | null): DemoMediaItem | null {
   return id ? items.find((item) => item.id === id) ?? null : null;
-}
-
-export async function hydrateDemoMediaIds(ids: string[]): Promise<void> {
-  const missing = [...new Set(ids)].filter((id) => id && !items.some((item) => item.id === id));
-  if (!missing.length) return;
-  const rows = await fetchMediaItemsByIds(missing.slice(0, 50));
-  const known = new Set(items.map((item) => item.id));
-  const additions = rows.filter((row) => !known.has(row.id)).map(toDemoMediaItem);
-  if (additions.length) { items = [...items, ...additions]; notify(); }
-}
-
-export function hydrateDemoMedia(force = false): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if (pending) return pending;
-  if (loaded && !force) return Promise.resolve();
-  pending = fetchUploadedMediaItems().then((rows) => {
-    items = rows.map(toDemoMediaItem);
-    loaded = true;
-    notify();
-  }).finally(() => { pending = null; });
-  return pending;
 }
 
 export async function registerDemoMediaItem(item: DemoMediaItem) {
@@ -121,12 +98,9 @@ export async function removeDemoMediaItem(id: string) {
 
 export function subscribeDemoMedia(callback: () => void) {
   if (typeof window === "undefined") return () => undefined;
-  const onFocus = () => { void hydrateDemoMedia(true).catch(() => undefined); };
   window.addEventListener(mediaChangeEvent, callback);
-  window.addEventListener("focus", onFocus);
   return () => {
     window.removeEventListener(mediaChangeEvent, callback);
-    window.removeEventListener("focus", onFocus);
   };
 }
 

@@ -19,6 +19,8 @@ export type DemoPost = {
   updatedAt: string;
   deletedAt?: string | null;
   coverMediaId: string | null;
+  /** Resolved public cover URL for list cards. */
+  coverImageUrl?: string | null;
   coverFit: "cover" | "contain";
   coverFocus: { x: number; y: number };
   coverZoom: number;

@@ -11,7 +11,7 @@ export async function getPublicLinkTargetCatalog(): Promise<LinkTargetCatalog> {
       select: { id: true, path: true },
     }),
     prisma.unit.findMany({
-      where: { status: UnitStatus.PUBLISHED, publishedSlug: { not: null } },
+      where: { status: UnitStatus.PUBLISHED, deletedAt: null, publishedSlug: { not: null } },
       select: { id: true, publishedSlug: true },
     }),
   ]);

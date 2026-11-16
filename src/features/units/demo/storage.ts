@@ -1,10 +1,12 @@
+import { createId } from "@/utils/create-id";
 import { unitRichTextContent, type DemoUnit } from "./model";
 let publicUnits: DemoUnit[] = [];
 let adminUnits: DemoUnit[] = [];
+let deletedUnits: DemoUnit[] = [];
 let publicLoaded = false;
 let adminLoaded = false;
-export function readUnits(includeDrafts = false): DemoUnit[] {
-  const units = (includeDrafts ? adminUnits : publicUnits) ?? [];
+export function readUnits(includeDrafts = false, includeDeleted = false): DemoUnit[] {
+  const units = (includeDeleted ? deletedUnits : includeDrafts ? adminUnits : publicUnits) ?? [];
   return units.map((unit) => ({
       ...unit,
       coverImageUrl: unit.coverImageUrl ?? null,
@@ -55,11 +57,12 @@ export function seedPublicUnits(units: DemoUnit[]): void {
   publicLoaded = true;
 }
 
-export async function refreshUnits(includeDrafts = false): Promise<DemoUnit[]> {
-  const response = await fetch(`/api/units${includeDrafts ? "?admin=1" : ""}`, { cache: "no-store" });
+export async function refreshUnits(includeDrafts = false, includeDeleted = false): Promise<DemoUnit[]> {
+  const response = await fetch(`/api/units${includeDeleted ? "?admin=1&trash=1" : includeDrafts ? "?admin=1" : ""}`, { cache: "no-store" });
   if (!response.ok) throw new Error("โหลดข้อมูลกลุ่มงานไม่สำเร็จ");
   const rows = await response.json() as DemoUnit[];
-  if (includeDrafts) { adminUnits = rows; adminLoaded = true; }
+  if (includeDeleted) deletedUnits = rows;
+  else if (includeDrafts) { adminUnits = rows; adminLoaded = true; }
   else { publicUnits = rows; publicLoaded = true; }
   window.dispatchEvent(new Event("hos-units-change"));
   return rows;
@@ -81,7 +84,7 @@ function migrateServices(services: unknown[]): DemoUnit["services"] {
   const items = services.flatMap((service) => {
     if (!isRecord(service)) return [];
     return [{
-      id: typeof service.id === "string" ? service.id : crypto.randomUUID(),
+      id: typeof service.id === "string" ? service.id : createId(),
       label: typeof service.name === "string" ? service.name : "ลิงก์บริการ",
       target: isRecord(service.target)
         ? service.target as DemoUnit["services"][number]["items"][number]["target"]

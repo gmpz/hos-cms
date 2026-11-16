@@ -23,7 +23,7 @@ export function parseAccessGrants(value: unknown): AccessGrants {
 
 export async function listAccessOptions(): Promise<AccessOptions> {
   const [units, users] = await Promise.all([
-    prisma.unit.findMany({ where: { id: { not: "hospital" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.unit.findMany({ where: { id: { not: "hospital" }, deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, displayName: true, username: true, profilePhotoFocusX: true, profilePhotoFocusY: true, profilePhotoZoom: true, profileMedia: { select: { fileName: true } } }, orderBy: { displayName: "asc" } }),
   ]);
   return {
@@ -34,7 +34,7 @@ export async function listAccessOptions(): Promise<AccessOptions> {
 
 async function validatePrincipals(tx: Transaction, grants: AccessGrants) {
   const [unitCount, userCount] = await Promise.all([
-    tx.unit.count({ where: { id: { in: grants.unitIds } } }),
+    tx.unit.count({ where: { id: { in: grants.unitIds }, deletedAt: null } }),
     tx.user.count({ where: { id: { in: grants.userIds }, status: "ACTIVE" } }),
   ]);
   if (unitCount !== grants.unitIds.length || userCount !== grants.userIds.length) throw new AccessInputError("ผู้ใช้หรือหน่วยงานที่เลือกไม่มีอยู่หรือถูกปิดใช้งาน");

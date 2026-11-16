@@ -179,7 +179,7 @@ export interface BlockConfigMap {
       }[];
     }[];
   };
-  faq: { items: { question: string; answer: string }[] };
+  faq: { title: string; description: string; items: { question: string; answer: string }[] };
   table: {
     caption: string;
     description: string;
@@ -322,6 +322,7 @@ export interface BlockConfigMap {
         | { kind: "unit"; unitId: EntityId }
         | { kind: "selected"; documentIds: EntityId[] };
       categoryId: EntityId | null;
+      fiscalYear: "all" | number;
     }[];
     limit: number;
   };
@@ -337,6 +338,8 @@ export type PageBlock = {
       : K extends "serviceGroups"
         ? 4
       : K extends "heading"
+        ? 2
+      : K extends "faq"
         ? 2
       : K extends "iframe"
         ? 2
@@ -372,7 +375,7 @@ export type PageBlock = {
               : K extends "contactInfo"
                 ? 2
               : K extends "documents"
-                ? 5
+                ? 6
               : K extends "image"
                 ? 10
               : K extends "gallery"

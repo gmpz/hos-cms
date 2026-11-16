@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, ChevronDown, EyeOff, Image as ImageIcon, ImagePlus, LayoutTemplate, Megaphone, RotateCcw, Save, Send, Settings2, Type } from "lucide-react";
+import { ArrowLeft, Check, Image as ImageIcon, ImagePlus, LayoutTemplate, Megaphone, RotateCcw, Settings2, Type } from "lucide-react";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -16,9 +16,11 @@ import { readUnits, refreshUnits } from "@/features/units/demo/storage";
 import { selectableModuleRoutes } from "@/features/navigation/module-routes";
 import type { AnnouncementDto, ModalSnapshot } from "@/features/announcements/types";
 import { AnnouncementRichTextEditor } from "./announcement-rich-text-editor";
+import { AnnouncementPublicationActions } from "./announcement-publication-actions";
 import { announcementPlainText } from "../announcement-content";
 
 const titleLimit = 80;
+const savedAtFormat = new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 type DestinationKind = "none" | "module" | "entity" | "external" | "legacy";
 type EntityTarget = { id: string; label: string; entity: "page" | "unit"; path: string };
 
@@ -36,7 +38,7 @@ function readEntityTargets(): EntityTarget[] {
   ];
 }
 
-type Form = Omit<AnnouncementDto, "id" | "imageUrl" | "status" | "revision" | "publishedAt" | "updatedAt" | "allowSuppression" | "repeatAfterDays" | "splashFrequency" | "splashIntervalHours" | "splashCookieVersion" | "modalCookieVersion" | "hasUnpublishedChanges" | "publishedSplash" | "publishedModal">;
+type Form = Omit<AnnouncementDto, "id" | "imageUrl" | "status" | "revision" | "publishedAt" | "deletedAt" | "updatedAt" | "allowSuppression" | "repeatAfterDays" | "splashFrequency" | "splashIntervalHours" | "splashCookieVersion" | "modalCookieVersion" | "hasUnpublishedChanges" | "publishedSplash" | "publishedModal">;
 
 const emptyForm = (): Form => ({
   title: "", description: "", displayMode: "MODAL", contentMode: "TEXT", imageMediaId: null,
@@ -67,30 +69,49 @@ const changeLabels: { key: keyof ModalSnapshot; label: string }[] = [
 export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
   const router = useRouter();
   const [form, setForm] = useState<Form>(() => formFrom(item));
+  const [priorityInput, setPriorityInput] = useState(() => String(item?.priority ?? 0));
   const [savedDraft, setSavedDraft] = useState<Form>(() => formFrom(item));
   const [targetKind, setTargetKind] = useState<DestinationKind>(() => destinationKind(item?.buttonUrl ?? "", []));
   const [entityTargets, setEntityTargets] = useState<EntityTarget[]>([]);
   const [imageUrl, setImageUrl] = useState(item?.imageUrl ?? null);
+  const [savedImageUrl, setSavedImageUrl] = useState(item?.imageUrl ?? null);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [revision, setRevision] = useState(item?.revision ?? 0);
   const [status, setStatus] = useState(item?.status ?? "DRAFT");
+  const [lastSavedAt, setLastSavedAt] = useState(item?.updatedAt ?? null);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(item?.hasUnpublishedChanges ?? false);
   const [publishedModal, setPublishedModal] = useState(item?.publishedModal ?? null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const busyRef = useRef(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null);
+  const allowLeaveRef = useRef(false);
   const selectedEntity = entityTargets.find((target) => target.path === form.buttonUrl);
   const selectedTargetKind = targetKind === "legacy" && selectedEntity ? "entity" : targetKind;
-  const savedChanges = hasUnpublishedChanges && publishedModal
-    ? changeLabels.filter(({ key }) => savedDraft[key] !== publishedModal[key]) : [];
-  const unsavedChanges = item ? changeLabels.filter(({ key }) => form[key] !== savedDraft[key]) : [];
+  const hasSavedDraft = Boolean(item) && (status !== "PUBLISHED" || hasUnpublishedChanges);
+  const savedBaseline = status === "PUBLISHED" && publishedModal ? publishedModal : emptyForm();
+  const savedChanges = hasSavedDraft
+    ? changeLabels.filter(({ key }) => savedDraft[key] !== savedBaseline[key]) : [];
+  const unsavedChanges = changeLabels.filter(({ key }) => form[key] !== savedDraft[key]);
+  const hasUnsavedChanges = JSON.stringify(form) !== JSON.stringify(savedDraft);
+  const shouldWarnOnLeave = !item || hasUnsavedChanges;
   const savedChange = (key: keyof ModalSnapshot) => savedChanges.some((change) => change.key === key);
   const unsavedChange = (key: keyof ModalSnapshot) => unsavedChanges.some((change) => change.key === key);
   const changedBadge = (key: keyof ModalSnapshot) => unsavedChange(key)
     ? <span className="splash-draft-field-badge">ยังไม่บันทึก</span>
-    : savedChange(key) ? <span className="splash-draft-field-badge">มีร่างที่บันทึกแล้ว</span> : null;
+    : savedChange(key) ? <span className="splash-draft-field-badge">ยังไม่เผยแพร่</span> : null;
+
+  function restoreSavedForm() {
+    setForm(savedDraft);
+    setPriorityInput(String(savedDraft.priority));
+    setTargetKind(destinationKind(savedDraft.buttonUrl, entityTargets));
+    setImageUrl(savedImageUrl);
+    setMediaOpen(false);
+  }
+
+  useEffect(() => () => { allowLeaveRef.current = false; }, []);
 
   useEffect(() => {
     const refreshTargets = () => setEntityTargets(readEntityTargets());
@@ -104,6 +125,33 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
       window.removeEventListener("hos-units-change", refreshTargets);
     };
   }, []);
+
+  useEffect(() => {
+    if (!shouldWarnOnLeave) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowLeaveRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const interceptLink = (event: MouseEvent) => {
+      if (allowLeaveRef.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("download") || (anchor.getAttribute("target") && anchor.getAttribute("target") !== "_self")) return;
+      const destination = new URL(anchor.href, window.location.href);
+      if (!(["http:", "https:"].includes(destination.protocol)) || destination.href === window.location.href) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingLeaveHref(destination.href);
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", interceptLink, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", interceptLink, true);
+    };
+  }, [shouldWarnOnLeave]);
 
   function changeDestination(kind: DestinationKind) {
     setTargetKind(kind);
@@ -155,16 +203,19 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
       if (!("id" in result)) throw new Error("ไม่พบข้อมูลประกาศที่บันทึก");
       setRevision(result.revision);
       setStatus(result.status);
+      setLastSavedAt(result.updatedAt);
       setHasUnpublishedChanges(result.hasUnpublishedChanges);
       setPublishedModal(result.publishedModal);
       const savedForm = formFrom(result);
       setForm(savedForm);
+      setPriorityInput(String(savedForm.priority));
       setSavedDraft(savedForm);
       setTargetKind(destinationKind(result.buttonUrl, entityTargets));
       setImageUrl(result.imageUrl);
+      setSavedImageUrl(result.imageUrl);
       if (publish) setConfirmPublish(false);
       showGlobalToast({ title: publish ? "เผยแพร่แล้ว" : "บันทึกร่างแล้ว", description: publish ? "ประกาศแสดงบนเว็บไซต์แล้ว" : status === "PUBLISHED" ? "ร่างที่บันทึกไว้ยังไม่แสดงบนเว็บไซต์ กดเผยแพร่เมื่อต้องการใช้" : "บันทึกประกาศเรียบร้อย" });
-      if (!item) router.replace(`/admin/announcements/${result.id}/edit`);
+      if (!item) { allowLeaveRef.current = true; router.replace(`/admin/announcements/${result.id}/edit`); }
       router.refresh();
     } catch (error) {
       showGlobalToast({ title: publish ? "เผยแพร่ไม่สำเร็จ" : "บันทึกไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
@@ -189,6 +240,7 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
       if (!("id" in result)) throw new Error("ไม่พบข้อมูลประกาศ");
       setRevision(result.revision);
       setStatus(result.status);
+      setLastSavedAt(result.updatedAt);
       setHasUnpublishedChanges(result.hasUnpublishedChanges);
       setConfirmUnpublish(false);
       showGlobalToast({ title: "ยกเลิกเผยแพร่แล้ว", description: "ประกาศนี้ไม่แสดงบนเว็บไซต์แล้ว" });
@@ -211,11 +263,14 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
       const result = await response.json() as AnnouncementDto | { error: string };
       if (!response.ok || !("id" in result)) throw new Error("error" in result ? result.error : "ยกเลิกร่างไม่สำเร็จ");
       setRevision(result.revision);
+      setLastSavedAt(result.updatedAt);
       const restoredForm = formFrom(result);
       setForm(restoredForm);
+      setPriorityInput(String(restoredForm.priority));
       setSavedDraft(restoredForm);
       setTargetKind(destinationKind(result.buttonUrl, entityTargets));
       setImageUrl(result.imageUrl);
+      setSavedImageUrl(result.imageUrl);
       setHasUnpublishedChanges(false);
       setPublishedModal(result.publishedModal);
       setConfirmDiscard(false);
@@ -233,21 +288,14 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
     <Link className="announcement-edit-back" href="/admin/announcements"><ArrowLeft size={16}/>ย้อนกลับ</Link>
     <header className="announcement-edit-heading">
       <div className="announcement-edit-title"><div><h1>{item ? "แก้ไขประกาศ" : "สร้างประกาศใหม่"}</h1><p>{item ? "ปรับเนื้อหาและลำดับการแสดงผล" : "เตรียมประกาศสำหรับผู้เข้าชมหน้าสาธารณะ"}</p></div></div>
-      <div className="announcement-edit-actions">
-        <button className="announcement-footer-save" type="submit" form="announcement-form" disabled={pending}><Save size={18}/>{pending ? "กำลังบันทึก..." : "บันทึกร่าง"}</button>
-        <div className="announcement-publish-group">
-          <button className="announcement-footer-publish" type="submit" form="announcement-form" data-action="publish" disabled={pending}><Send size={18}/>{pending ? "กำลังดำเนินการ..." : "เผยแพร่"}</button>
-          {status === "PUBLISHED" && item ? <details className="announcement-publish-dropdown"><summary aria-label="ตัวเลือกการเผยแพร่"><ChevronDown size={18}/></summary><div className="announcement-publish-menu"><button type="button" disabled={pending} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setConfirmUnpublish(true); }}><EyeOff size={16}/>ยกเลิกเผยแพร่</button></div></details> : null}
-        </div>
-      </div>
+      <AnnouncementPublicationActions formId="announcement-form" published={status === "PUBLISHED"} existing={Boolean(item)} unsaved={hasUnsavedChanges} savedDraft={hasUnpublishedChanges} pending={pending} onUnpublish={() => setConfirmUnpublish(true)}/>
     </header>
-    {status === "PUBLISHED" && (hasUnpublishedChanges || unsavedChanges.length > 0) ? <section className="splash-draft-notice" aria-live="polite">
+    {(shouldWarnOnLeave || hasSavedDraft) ? <section className="splash-draft-notice" aria-live="polite">
       <div>
-        <strong>{unsavedChanges.length ? "มีการแก้ไขที่ยังไม่บันทึก" : "มีร่างที่บันทึกแล้ว ยังไม่แสดงบนเว็บไซต์"}</strong>
-        {unsavedChanges.length ? <p>ยังไม่บันทึก: {unsavedChanges.map((change) => change.label).join(" · ")}</p> : null}
-        {hasUnpublishedChanges ? <p>ร่างที่บันทึก: {savedChanges.map((change) => change.label).join(" · ") || "เนื้อหาประกาศ"} — กดเผยแพร่เพื่ออัปเดตหน้าเว็บจริง</p> : null}
+        <strong>{hasUnsavedChanges ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : !item ? "ประกาศนี้ยังไม่ได้บันทึก" : hasUnpublishedChanges ? "มีร่างที่บันทึกแล้ว ยังไม่ได้เผยแพร่" : "บันทึกร่างแล้ว ยังไม่ได้เผยแพร่"}</strong>
+        {hasSavedDraft && lastSavedAt ? <p>บันทึกล่าสุด {savedAtFormat.format(new Date(lastSavedAt))} · {status === "PUBLISHED" ? "หน้าเว็บไซต์ยังแสดงฉบับเดิม" : "ประกาศนี้ยังไม่แสดงบนเว็บไซต์"}</p> : null}
       </div>
-      {hasUnpublishedChanges ? <button type="button" disabled={pending} onClick={() => setConfirmDiscard(true)}><RotateCcw size={16}/>ยกเลิกร่าง</button> : null}
+      {status === "PUBLISHED" && hasUnpublishedChanges ? <button type="button" disabled={pending} onClick={() => setConfirmDiscard(true)}><RotateCcw size={16}/>ยกเลิกร่างที่บันทึก</button> : null}
     </section> : null}
     <form id="announcement-form" className="announcement-edit-form" onSubmit={(event) => void save(event)}>
       <section className="announcement-edit-card announcement-content-card">
@@ -299,7 +347,7 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
             <p className="announcement-repeat-help">เริ่มนับเมื่อผู้ชมปิดประกาศ แต่ละประกาศจดจำแยกกัน</p>
           </section>
           <section className="announcement-settings-section"><h3><Settings2 size={16}/>ลำดับการแสดงผล</h3>
-            <label><span>ลำดับ (0 = ท้ายสุด) {changedBadge("priority")}</span><input type="number" min={0} max={9999} value={form.priority} onChange={(event) => setForm({ ...form, priority: Number(event.target.value) })}/></label>
+            <label><span>ลำดับ (0 = ท้ายสุด) {changedBadge("priority")}</span><input type="number" min={0} max={9999} value={priorityInput} onChange={(event) => { const value = event.target.value; setPriorityInput(value); if (value === "" || /^\d+$/.test(value)) setForm((current) => ({ ...current, priority: value === "" ? 0 : Number(value) })); }} onBlur={() => setPriorityInput(String(form.priority))}/></label>
           </section>
           <div className="announcement-modal-note"><Megaphone size={17}/><span><strong>แสดงทีละรายการ</strong><small>มีเลขลำดับและปุ่มถัดไปเมื่อมีหลายประกาศ โดยไม่โหลดหน้าเว็บใหม่</small></span></div>
         </div>
@@ -308,6 +356,7 @@ export function AnnouncementEditor({ item }: { item?: AnnouncementDto }) {
     <MediaPicker open={mediaOpen} currentId={form.imageMediaId} acceptKind="image" onClose={() => setMediaOpen(false)} onSelect={(selected: DemoMediaItem, alt: string) => { setForm({...form,imageMediaId:selected.id,imageAlt:alt || selected.alt}); setImageUrl(selected.previewUrl); setMediaOpen(false); }}/>
     {confirmPublish ? <ConfirmDialog title="เผยแพร่ประกาศ?" description="ระบบจะบันทึกข้อมูลล่าสุดและแสดงเมื่อผู้ชมเข้าหน้าสาธารณะโดยยังไม่เคยเห็นประกาศนี้" confirmLabel="บันทึกและเผยแพร่" variant="default" pending={pending} onClose={() => setConfirmPublish(false)} onConfirm={() => void persist(true)}/>: null}
     {confirmUnpublish ? <ConfirmDialog title="ยกเลิกเผยแพร่ประกาศ?" description={`ประกาศ “${form.title}” จะไม่แสดงบนเว็บไซต์`} confirmLabel="ยกเลิกเผยแพร่" pending={pending} onClose={() => setConfirmUnpublish(false)} onConfirm={() => void unpublish()}/>: null}
-    {confirmDiscard ? <ConfirmDialog title="ยกเลิกร่างที่บันทึกไว้?" description={unsavedChanges.length ? "ร่างที่บันทึกไว้และการแก้ไขที่ยังไม่บันทึกจะถูกแทนด้วยฉบับที่เผยแพร่" : "การแก้ไขในร่างจะถูกแทนด้วยฉบับที่เผยแพร่"} confirmLabel="ยกเลิกร่าง" pending={pending} onClose={() => setConfirmDiscard(false)} onConfirm={() => void discardDraft()}/>: null}
+    {confirmDiscard ? <ConfirmDialog title="ยกเลิกร่างที่บันทึกไว้?" description="ร่างที่บันทึกไว้และการแก้ไขที่ยังไม่บันทึกจะถูกแทนด้วยฉบับที่เผยแพร่" confirmLabel="ยกเลิกร่าง" pending={pending} onClose={() => setConfirmDiscard(false)} onConfirm={() => void discardDraft()}/>: null}
+    {pendingLeaveHref ? <ConfirmDialog title="ออกจากหน้าแก้ไขประกาศโดยไม่บันทึก?" description="การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป หากต้องการเก็บไว้ ให้ยกเลิกแล้วกดบันทึกร่างก่อนออกจากหน้า" confirmLabel="ออกโดยไม่บันทึก" onClose={() => setPendingLeaveHref(null)} onConfirm={() => { const destination = new URL(pendingLeaveHref); restoreSavedForm(); allowLeaveRef.current = true; setPendingLeaveHref(null); if (destination.origin === window.location.origin) router.push(`${destination.pathname}${destination.search}${destination.hash}`); else window.location.assign(destination.href); }}/>: null}
   </div>;
 }

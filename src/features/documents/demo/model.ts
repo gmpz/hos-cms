@@ -1,3 +1,5 @@
+import { createId } from "@/utils/create-id";
+import type { UploadedMediaItem } from "@/features/media/upload-media-file";
 export type DemoDocumentStatus = "draft" | "published" | "archived";
 
 export type DemoDocument = {
@@ -11,10 +13,12 @@ export type DemoDocument = {
   documentNumber: string;
   issuedOn: string;
   mediaIds: string[];
+  media?: UploadedMediaItem | null;
   openCount: number;
   downloadCount: number;
   status: DemoDocumentStatus;
   publishedAt: string | null;
+  isNew: boolean;
   deletedAt?: string | null;
   updatedAt: string;
 };
@@ -32,7 +36,7 @@ export function currentThaiFiscalYear(date = new Date()): number {
 
 export function createDemoDocument(): DemoDocument {
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     title: "",
     description: "",
     categoryId: "",
@@ -46,6 +50,7 @@ export function createDemoDocument(): DemoDocument {
     downloadCount: 0,
     status: "draft",
     publishedAt: null,
+    isNew: false,
     deletedAt: null,
     updatedAt: "เมื่อสักครู่",
   };

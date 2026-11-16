@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CircleAlert,
   Check,
   FileText,
   Image as ImageIcon,
@@ -40,6 +41,7 @@ type UploadTask = {
   percent: number | null;
   error: string | null;
   retryable: boolean;
+  retrying?: boolean;
   controller: AbortController | null;
 };
 type PickerEntry = { type: "upload"; task: UploadTask } | { type: "media"; item: DemoMediaItem };
@@ -51,6 +53,7 @@ const supportedDocumentTypes = new Set([
   "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
+const uploadSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 function uploadValidationError(file: File, kind: NonNullable<Props["acceptKind"]>): string | null {
   if (file.size === 0) return "ไฟล์ว่าง ไม่สามารถอัปโหลดได้";
@@ -103,21 +106,25 @@ function PickerUploadActions({ task, onCancel, onRetry, onDismiss }: PickerUploa
 function PickerUploadCard(props: PickerUploadProps) {
   const { task } = props;
   const Icon = task.file.type.startsWith("image/") ? ImageIcon : FileText;
+  const loading = task.status === "uploading" || task.status === "saving" || (task.retrying && task.status === "queued");
+  const failed = task.status === "error";
   return <div className={`media-picker-upload-card ${task.status}`}>
-    <div className="media-picker-upload-placeholder" aria-hidden="true">
-      {task.status === "uploading" || task.status === "saving" ? <LoaderCircle size={28}/> : <Icon size={28}/>}
+    <div className={`media-picker-upload-placeholder media-upload-preview${failed ? " failed" : ""}`}>
+      {loading ? <div className="media-upload-retry-progress" role="status"><LoaderCircle size={28}/><span>กำลังอัปโหลด</span></div> : failed ? <><div className="media-upload-error-visual"><CircleAlert size={28} aria-hidden="true"/><span>{task.error ?? "อัปโหลดไม่สำเร็จ"}</span></div><div className="media-upload-error-actions">{task.retryable && !task.controller ? <button type="button" className="media-upload-retry" onClick={() => props.onRetry(task.id)} aria-label={`ลองอัปโหลด ${task.file.name} อีกครั้ง`} title="ลองใหม่"><RotateCcw size={22}/></button> : null}<button type="button" onClick={() => props.onDismiss(task.id)} aria-label={`นำ ${task.file.name} ออกจากรายการ`} title="นำออกจากรายการ"><X size={24}/></button></div></> : <Icon size={28} aria-hidden="true"/>}
     </div>
-    <div className="media-picker-upload-details">
-      <b title={task.file.name}>{task.file.name}</b>
-      <PickerUploadStatus task={task}/>
-      <PickerUploadActions {...props}/>
-    </div>
+    {loading ? <div className="media-picker-upload-details media-picker-upload-details-placeholder" aria-hidden="true"/> : <div className="media-picker-upload-details">
+      <b title={task.file.name}>{task.file.name}</b><small>{uploadSize(task.file.size)}</small>
+      {failed ? null : <><PickerUploadStatus task={task}/><PickerUploadActions {...props}/></>}
+    </div>}
   </div>;
 }
 
 function PickerUploadRow(props: PickerUploadProps) {
   const { task } = props;
   const Icon = task.file.type.startsWith("image/") ? ImageIcon : FileText;
+  if (task.status === "uploading" || task.status === "saving" || (task.retrying && task.status === "queued")) {
+    return <div className="media-picker-upload-row media-picker-upload-row-loading" role="status"><span>กำลังอัปโหลด</span><div className="media-upload-progress indeterminate" aria-hidden="true"><span/></div></div>;
+  }
   return <div className={`media-picker-upload-row ${task.status}`}>
     <span className="media-picker-upload-row-icon" aria-hidden="true"><Icon size={20}/></span>
     <div className="media-picker-upload-row-details">
@@ -141,6 +148,7 @@ function OpenMediaPicker({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
+  const [previousCursors, setPreviousCursors] = useState<(string | null)[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadedRequestKey, setLoadedRequestKey] = useState("");
   const [requestError, setRequestError] = useState<{ key: string; message: string } | null>(null);
@@ -159,7 +167,7 @@ function OpenMediaPicker({
   const requestKey = `${queryKey}:${cursor ?? "first"}:${refreshKey}`;
   const loading = loadedRequestKey !== requestKey;
   const loadError = requestError?.key === requestKey ? requestError.message : "";
-  const visible = itemsKey === queryKey ? items : [];
+  const visible = itemsKey === requestKey ? items : [];
   const entries: PickerEntry[] = [
     ...uploadTasks.map((task): PickerEntry => ({ type: "upload", task })),
     ...visible.map((item): PickerEntry => ({ type: "media", item })),
@@ -174,7 +182,7 @@ function OpenMediaPicker({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
   useEffect(() => {
-    const timer = window.setTimeout(() => { setDebouncedSearch(search); setCursor(null); }, 250);
+    const timer = window.setTimeout(() => { setDebouncedSearch(search); setCursor(null); setPreviousCursors([]); }, 250);
     return () => window.clearTimeout(timer);
   }, [search]);
   useEffect(() => {
@@ -183,8 +191,8 @@ function OpenMediaPicker({
       .then((page) => {
         if (controller.signal.aborted) return;
         const additions = page.items.map(toDemoMediaItem);
-        setItems((current) => cursor ? [...current, ...additions] : additions);
-        setItemsKey(queryKey);
+        setItems(additions);
+        setItemsKey(requestKey);
         setNextCursor(page.nextCursor);
         setRequestError(null);
         setLoadedRequestKey(requestKey);
@@ -196,14 +204,6 @@ function OpenMediaPicker({
       });
     return () => controller.abort();
   }, [acceptKind, debouncedSearch, cursor, queryKey, refreshKey, requestKey]);
-  useEffect(() => {
-    if (loading || !nextCursor || itemsKey !== queryKey) return;
-    const content = contentRef.current;
-    if (content && content.scrollHeight <= content.clientHeight + 160) {
-      const frame = window.requestAnimationFrame(() => setCursor(nextCursor));
-      return () => window.cancelAnimationFrame(frame);
-    }
-  }, [loading, nextCursor, itemsKey, queryKey, items]);
   useEffect(() => {
     const queue = uploadTasksRef;
     mountedRef.current = true;
@@ -257,12 +257,11 @@ function OpenMediaPicker({
         tone: (task.id % 5) + 1,
       };
       addUploadedMediaItem(item);
-      setItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)]);
-      setItemsKey(queryKey);
       setSelectedId(item.id);
       setSelectedItem(item);
       uploadTasksRef.current = uploadTasksRef.current.filter((entry) => entry.id !== task.id);
       setCursor(null);
+      setPreviousCursors([]);
       setRefreshKey((value) => value + 1);
     } catch (error) {
       if (task.controller?.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
@@ -289,6 +288,7 @@ function OpenMediaPicker({
     setSearch("");
     setDebouncedSearch("");
     setCursor(null);
+    setPreviousCursors([]);
     contentRef.current?.scrollTo({ top: 0 });
     publishUploadTasks();
     pumpUploads();
@@ -307,6 +307,7 @@ function OpenMediaPicker({
     const task = uploadTasksRef.current.find((entry) => entry.id === id);
     if (!task || task.controller || !task.retryable || (task.status !== "error" && task.status !== "canceled")) return;
     task.status = "queued";
+    task.retrying = true;
     task.percent = 0;
     task.error = null;
     publishUploadTasks();
@@ -346,6 +347,7 @@ function OpenMediaPicker({
             <X size={20} />
           </button>
         </header>
+        <div ref={contentRef} className="media-picker-content">
         <div className="media-picker-tools">
           <input
             ref={inputRef}
@@ -436,16 +438,13 @@ function OpenMediaPicker({
           </div>
           <p className="media-picker-count" aria-live="polite">
             {loadError
-              ? `แสดงแล้ว ${visible.length} รายการ · โหลดเพิ่มเติมไม่สำเร็จ`
-              : loading && entries.length === 0
+              ? "โหลดรายการไฟล์ไม่สำเร็จ"
+              : loading
               ? "กำลังโหลดรายการไฟล์..."
-              : `แสดงแล้ว ${visible.length} รายการ${uploadTasks.length ? ` · กำลังจัดการ ${uploadTasks.length} ไฟล์` : ""}${loading ? " · กำลังโหลดเพิ่ม..." : nextCursor ? " · เลื่อนลงเพื่อโหลดเพิ่ม" : " · ครบแล้ว"}`}
+              : `หน้า ${previousCursors.length + 1} · ${visible.length} รายการ${uploadTasks.length ? ` · กำลังจัดการ ${uploadTasks.length} ไฟล์` : ""}`}
           </p>
         </div>
-        <div ref={contentRef} className="media-picker-content" onScroll={(event) => {
-          const area = event.currentTarget;
-          if (!loading && !loadError && nextCursor && itemsKey === queryKey && area.scrollTop + area.clientHeight >= area.scrollHeight - 240) setCursor(nextCursor);
-        }}>
+        <div className="media-picker-file-list">
           {loadError && entries.length === 0 ? (
             <div className="media-picker-empty" role="alert">{loadError} <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div>
           ) : loading && entries.length === 0 ? (
@@ -466,7 +465,7 @@ function OpenMediaPicker({
                 >
                   <span
                     className={`media-picker-thumb ${item.kind === "document" ? "document" : ""}`}
-                    style={mediaPreviewStyle(item)}
+                    style={item.kind === "image" ? mediaPreviewStyle(item) : undefined}
                   >
                     {item.kind === "document" ? (
                       <DocumentFileIcon file={item} size={28} />
@@ -479,7 +478,10 @@ function OpenMediaPicker({
                       </i>
                     ) : null}
                   </span>
-                  <b>{item.name}</b>
+                  <div className="media-picker-upload-details">
+                    <b title={item.name}>{item.name}</b>
+                    <small>{item.size}</small>
+                  </div>
                 </button>
                 );
               })}
@@ -498,7 +500,7 @@ function OpenMediaPicker({
                 >
                   <span
                     className={`media-picker-thumb ${item.kind === "document" ? "document" : ""}`}
-                    style={mediaPreviewStyle(item)}
+                    style={item.kind === "image" ? mediaPreviewStyle(item) : undefined}
                   >
                     {item.kind === "document" ? (
                       <DocumentFileIcon file={item} size={20} />
@@ -515,15 +517,24 @@ function OpenMediaPicker({
             </div>
           )}
         </div>
-        {loadError && entries.length > 0 ? (
-          <div className="media-picker-load-more" role="alert">{loadError} <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div>
+        {(previousCursors.length > 0 || nextCursor) ? (
+          <nav className="media-picker-pagination" aria-label="หน้ารายการไฟล์">
+            <button type="button" disabled={loading || previousCursors.length === 0} onClick={() => {
+              const previous = previousCursors.at(-1) ?? null;
+              setPreviousCursors((current) => current.slice(0, -1));
+              setCursor(previous);
+              contentRef.current?.scrollTo({ top: 0 });
+            }}>ก่อนหน้า</button>
+            <span>หน้า {previousCursors.length + 1}</span>
+            <button type="button" disabled={loading || !nextCursor} onClick={() => {
+              if (!nextCursor) return;
+              setPreviousCursors((current) => [...current, cursor]);
+              setCursor(nextCursor);
+              contentRef.current?.scrollTo({ top: 0 });
+            }}>ถัดไป</button>
+          </nav>
         ) : null}
-        {loading && visible.length > 0 ? (
-          <div className="media-picker-load-more" role="status">
-            <LoaderCircle size={16} aria-hidden="true" />
-            กำลังโหลดไฟล์เพิ่มเติม...
-          </div>
-        ) : null}
+        </div>
         <footer>
           {selected ? (
             <>
@@ -540,7 +551,10 @@ function OpenMediaPicker({
               </div>
               <button
                 className="primary-button"
-                onClick={() => onSelect(selected, selected.name.replace(/\.[^.]+$/, ""))}
+                onClick={() => {
+                  addUploadedMediaItem(selected);
+                  onSelect(selected, selected.name.replace(/\.[^.]+$/, ""));
+                }}
               >
                 ใช้สื่อนี้
               </button>

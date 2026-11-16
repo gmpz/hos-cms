@@ -3,13 +3,13 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { currentUser } from "@/server/auth/session";
 import { AnnouncementInputError } from "@/server/announcements/repository";
-import { createSplashScreen, listSplashScreens } from "@/server/splash-screens/repository";
+import { createSplashScreen, listSplashScreens, listDeletedSplashScreens } from "@/server/splash-screens/repository";
 
 async function administrator() { const user = await currentUser(); return user?.role === "ADMIN" && !user.mustChangePassword ? user : null; }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!await administrator()) return NextResponse.json({ error: "ไม่มีสิทธิ์ดู Splash Screen" }, { status: 401 });
-  return NextResponse.json(await listSplashScreens(), { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json(await (new URL(request.url).searchParams.get("trash") === "1" ? listDeletedSplashScreens() : listSplashScreens()), { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {

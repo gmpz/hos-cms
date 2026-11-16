@@ -23,6 +23,7 @@ const emptyNotices: ToastNotice[] = [];
 const listeners = new Set<() => void>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 let notices: ToastNotice[] = emptyNotices;
+let nextNoticeId = 0;
 
 function emit() {
   for (const listener of listeners) listener();
@@ -38,7 +39,7 @@ function dismiss(id: string) {
 
 export function showGlobalToast(input: ToastInput | null) {
   if (!input) return;
-  const id = crypto.randomUUID();
+  const id = String(++nextNoticeId);
   notices = [...notices, {
     id,
     title: input.title,

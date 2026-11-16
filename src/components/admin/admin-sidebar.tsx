@@ -40,7 +40,9 @@ const menu: MenuItem[] = [
 
 function active(pathname: string, href: string) {
   const target = href.split("?")[0];
-  return target === "/admin" ? pathname === target : pathname === target || pathname.startsWith(target + "/");
+  return target === "/admin" || target === "/admin/settings"
+    ? pathname === target
+    : pathname === target || pathname.startsWith(target + "/");
 }
 
 export function AdminSidebar({ open, collapsed, onClose }: Props) {

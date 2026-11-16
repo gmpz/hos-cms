@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { connection } from "next/server";
 import { PostStatus, Prisma, type Post } from "@prisma/client";
-import type { ArticleBlock } from "@/features/pages/blocks/config/types";
+import type { ArticleBlock, BlockConfigMap } from "@/features/pages/blocks/config/types";
 import { migrateDownloadsBlocks } from "@/features/pages/blocks/migrations/downloads";
 import { migrateDocumentListBlocks } from "@/features/pages/blocks/migrations/document-list";
 import { migrateGalleryBlocks } from "@/features/pages/blocks/migrations/gallery";
@@ -14,6 +14,7 @@ import { migrateTableBlocks } from "@/features/pages/blocks/migrations/table";
 import { migrateHeadingBlocks } from "@/features/pages/blocks/migrations/heading";
 import type { DemoPost } from "@/features/pages/demo/data";
 import { prisma } from "@/server/database/prisma";
+import { listPublicMediaItemsByIds } from "@/server/media/repository";
 
 const articleTypes = new Set([
   "heading", "text", "cardText", "image", "cta", "gallery",
@@ -132,7 +133,14 @@ export async function listPosts(includeDrafts: boolean): Promise<DemoPost[]> {
     where: { deletedAt: null, ...(includeDrafts ? {} : { status: PostStatus.PUBLISHED, publishedSnapshot: { not: Prisma.DbNull } }) },
     orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
   });
-  return posts.map((post) => toPostDto(post, !includeDrafts));
+  const result = posts.map((post) => toPostDto(post, !includeDrafts));
+  return includeDrafts ? result : withCoverUrls(result);
+}
+
+async function withCoverUrls(posts: DemoPost[]): Promise<DemoPost[]> {
+  const media = await listPublicMediaItemsByIds(posts.flatMap((post) => post.coverMediaId ? [post.coverMediaId] : []));
+  const urls = new Map(media.filter((item) => item.kind === "image").map((item) => [item.id, item.previewUrl]));
+  return posts.map((post) => ({ ...post, coverImageUrl: post.coverMediaId ? urls.get(post.coverMediaId) ?? null : null }));
 }
 
 export async function listDeletedPosts(): Promise<DemoPost[]> {
@@ -178,6 +186,24 @@ function toPostListDto(post: PostListRow, publicView = false): DemoPost {
     hasUnpublishedChanges: publicView ? false : post.hasUnpublishedChanges,
     viewCount: post.viewCount,
   };
+}
+
+export async function listPublicNewsTabPosts(tab: BlockConfigMap["newsTabs"]["tabs"][number]): Promise<DemoPost[]> {
+  const rows = await prisma.post.findMany({
+    where: {
+      deletedAt: null,
+      status: PostStatus.PUBLISHED,
+      publishedSnapshot: { not: Prisma.DbNull },
+      ...(tab.categoryId ? { publishedCategoryId: tab.categoryId } : {}),
+      ...(tab.source.kind === "all" ? {} : {
+        publishedUnitId: tab.source.kind === "hospital" ? "hospital" : tab.source.unitId,
+      }),
+    },
+    select: postListSelect,
+    orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
+    take: 4,
+  });
+  return withCoverUrls(rows.map((post) => toPostListDto(post, true)));
 }
 
 export type PostPageQuery = {
@@ -248,8 +274,10 @@ export async function listPostPage(query: PostPageQuery) {
     skip: (page - 1) * query.pageSize,
     take: query.pageSize,
   });
+  const items = rows.map((post) => toPostListDto(post, query.publicView));
+  const resolvedItems = query.publicView ? await withCoverUrls(items) : items;
   return {
-    items: rows.map((post) => toPostListDto(post, query.publicView)), page, pageSize: query.pageSize, total,
+    items: resolvedItems, page, pageSize: query.pageSize, total,
     years, selectedYear,
     categoryCounts: Object.fromEntries(categoryGroups.map((item) => ["publishedCategoryId" in item ? item.publishedCategoryId : item.categoryId, item._count._all])),
     trashTotal,
@@ -260,7 +288,7 @@ export async function getPublishedPostBySlug(slug: string): Promise<DemoPost | n
   const post = await prisma.post.findFirst({
     where: { slug, status: PostStatus.PUBLISHED, deletedAt: null, publishedSnapshot: { not: Prisma.DbNull } },
   });
-  return post ? toPostDto(post, true) : null;
+  return post ? (await withCoverUrls([toPostDto(post, true)]))[0] : null;
 }
 
 export async function getRelatedPosts(post: DemoPost, limit = 4): Promise<DemoPost[]> {
@@ -291,7 +319,7 @@ export async function getRelatedPosts(post: DemoPost, limit = 4): Promise<DemoPo
     });
     selected.push(...rows);
   }
-  return selected.map((item) => toPostListDto(item, true));
+  return withCoverUrls(selected.map((item) => toPostListDto(item, true)));
 }
 
 export async function getPostById(id: string): Promise<DemoPost | null> {
@@ -325,7 +353,7 @@ export async function savePost(input: unknown): Promise<DemoPost> {
   const blocks = articleBlocks(input.blocks);
   const category = await prisma.category.findFirst({ where: { id: categoryId, scope: "POSTS", active: true }, select: { id: true } });
   if (!category) throw new PostInputError("ไม่พบหมวดหมู่ข่าวที่เปิดใช้งาน");
-  const unit = await prisma.unit.findUnique({ where: { id: unitId }, select: { name: true } });
+  const unit = await prisma.unit.findFirst({ where: { id: unitId, deletedAt: null }, select: { name: true } });
   if (!unit) throw new PostInputError("ไม่พบเจ้าของเนื้อหาในฐานข้อมูล");
   const owner = unit.name;
   const data = { title, excerpt, owner, categoryId, unitId, coverMediaId, coverFit, coverFocusX, coverFocusY, coverZoom, showCoverInContent: input.showCoverInContent, blocks: blocks as Prisma.InputJsonValue };

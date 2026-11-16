@@ -1,37 +1,32 @@
 "use client";
+import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
+  Archive,
   Eye,
   Image as ImageIcon,
   Megaphone,
-  MonitorUp,
   Pencil,
   Plus,
+  RotateCcw,
   Send,
   Trash2,
 } from "lucide-react";
 import { AdminTableLoadingRows } from "@/components/admin/admin-content-loading";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { showGlobalToast } from "@/components/ui/global-toast";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PendingDraftStatus, StatusBadge } from "@/components/ui/status-badge";
 import type { AnnouncementDto } from "@/features/announcements/types";
 import { announcementPlainText } from "@/features/announcements/announcement-content";
+import { AnnouncementPurgeDialog } from "./announcement-purge-dialog";
 
-const pageSize = 10;
 
-function paginationItems(current: number, total: number) {
-  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
-  return [...new Set([1, current - 1, current, current + 1, total])]
-    .filter((page) => page > 0 && page <= total)
-    .sort((left, right) => left - right);
-}
 
-async function fetchAnnouncements(signal?: AbortSignal): Promise<AnnouncementDto[]> {
-  const response = await fetch("/api/announcements", { cache: "no-store", signal });
+
+async function fetchAnnouncements(trash: boolean, signal?: AbortSignal): Promise<AnnouncementDto[]> {
+  const response = await fetch(`/api/announcements${trash ? "?trash=1" : ""}`, { cache: "no-store", signal });
   if (!response.ok) throw new Error("โหลดข้อมูลไม่สำเร็จ");
   return await response.json() as AnnouncementDto[];
 }
@@ -42,27 +37,32 @@ export function AnnouncementsManager({
   initialItems: AnnouncementDto[];
 }) {
   const [items, setItems] = useState<AnnouncementDto[]>(initialItems);
+  const [deletedItems, setDeletedItems] = useState<AnnouncementDto[]>([]);
+  const [filter, setFilter] = useState<"all" | "published" | "draft" | "trash">("all");
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const requestInFlight = useRef(false);
   const listRequestId = useRef(0);
   const [confirm, setConfirm] = useState<{
     item: AnnouncementDto;
-    action: "publish" | "unpublish" | "delete";
+    action: "publish" | "unpublish" | "delete" | "restore" | "purge";
   } | null>(null);
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const filteredItems = filter === "trash" ? deletedItems : filter === "published" ? items.filter((item) => item.status === "PUBLISHED") : filter === "draft" ? items.filter((item) => item.status === "DRAFT") : items;
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const visibleItems = items.slice(pageStart, pageStart + pageSize);
-  const pageNumbers = paginationItems(safePage, totalPages);
+  const visibleItems = filteredItems.slice(pageStart, pageStart + pageSize);
+  function selectFilter(next: typeof filter) { setFilter(next); setCurrentPage(1); }
+
 
   const load = useCallback(async () => {
     const requestId = ++listRequestId.current;
     setLoading(true);
     try {
-      const latestItems = await fetchAnnouncements();
-      if (requestId === listRequestId.current) setItems(latestItems);
+      const [active, deleted] = await Promise.all([fetchAnnouncements(false), fetchAnnouncements(true)]);
+      if (requestId === listRequestId.current) { setItems(active); setDeletedItems(deleted); }
     } catch {
       showGlobalToast({
         title: "โหลดข้อมูลไม่สำเร็จ",
@@ -77,8 +77,8 @@ export function AnnouncementsManager({
   useEffect(() => {
     const controller = new AbortController();
     const requestId = ++listRequestId.current;
-    void fetchAnnouncements(controller.signal).then((latestItems) => {
-      if (requestId === listRequestId.current) setItems(latestItems);
+    void Promise.all([fetchAnnouncements(false, controller.signal), fetchAnnouncements(true, controller.signal)]).then(([active, deleted]) => {
+      if (requestId === listRequestId.current) { setItems(active); setDeletedItems(deleted); }
     }).catch(() => {
       if (!controller.signal.aborted) showGlobalToast({ title: "โหลดข้อมูลไม่สำเร็จ", description: "กรุณาลองใหม่อีกครั้ง", variant: "error" });
     });
@@ -100,16 +100,17 @@ export function AnnouncementsManager({
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "ดำเนินการไม่สำเร็จ");
+      const action = confirm.action;
       setConfirm(null);
       await load();
       showGlobalToast({
         title: "ดำเนินการแล้ว",
         description:
-          confirm.action === "publish"
+          action === "publish"
             ? "เผยแพร่ประกาศแล้ว"
-            : confirm.action === "unpublish"
+            : action === "unpublish"
               ? "ยกเลิกการเผยแพร่แล้ว"
-              : "ลบประกาศแล้ว",
+              : action === "delete" ? "ย้ายประกาศไปถังขยะแล้ว" : action === "restore" ? "กู้คืนประกาศเป็นฉบับร่างแล้ว" : "ลบประกาศถาวรแล้ว",
       });
     } catch (error) {
       showGlobalToast({
@@ -127,7 +128,7 @@ export function AnnouncementsManager({
     <div className="announcements-manager documents-manager modal-announcements-manager">
       <header className="documents-heading">
         <div>
-          <h1>Announcements</h1>
+          <h1>ประกาศ</h1>
           <p>จัดการประกาศที่แสดงเมื่อผู้ชมเข้าหน้าสาธารณะครั้งแรก</p>
         </div>
         <Link className="primary-button" href="/admin/announcements/new">
@@ -135,59 +136,36 @@ export function AnnouncementsManager({
           เพิ่มประกาศ
         </Link>
       </header>
-      <section className="announcement-summary document-summary">
-        <div>
-          <span>
-            <Megaphone size={19} />
-          </span>
-          <p>
-            ประกาศทั้งหมด<strong>{items.length}</strong>
-          </p>
-        </div>
-        <div>
-          <span>
-            <Send size={19} />
-          </span>
-          <p>
-            เผยแพร่แล้ว
-            <strong>
-              {items.filter((x) => x.status === "PUBLISHED").length}
-            </strong>
-          </p>
-        </div>
-        <div>
-          <span>
-            <MonitorUp size={19} />
-          </span>
-          <p>
-            ฉบับร่าง
-            <strong>{items.filter((x) => x.status === "DRAFT").length}</strong>
-          </p>
-        </div>
+      <section className="announcement-summary document-summary" aria-label="สรุปประกาศ">
+        <button type="button" aria-pressed={filter === "all"} onClick={() => selectFilter("all")}><span className="document-summary-icon"><Megaphone size={19}/></span><span className="document-summary-copy">ประกาศทั้งหมด<strong>{items.length}</strong></span></button>
+        <button type="button" aria-pressed={filter === "published"} onClick={() => selectFilter("published")}><span className="document-summary-icon"><Send size={19}/></span><span className="document-summary-copy">เผยแพร่แล้ว<strong>{items.filter((item) => item.status === "PUBLISHED").length}</strong></span></button>
+        <button type="button" aria-pressed={filter === "draft"} onClick={() => selectFilter("draft")}><span className="document-summary-icon"><Archive size={19}/></span><span className="document-summary-copy">ฉบับร่าง<strong>{items.filter((item) => item.status === "DRAFT").length}</strong></span></button>
+        <button type="button" aria-pressed={filter === "trash"} onClick={() => selectFilter("trash")}><span className="document-summary-icon"><Trash2 size={19}/></span><span className="document-summary-copy">อยู่ในถังขยะ<strong>{deletedItems.length}</strong></span></button>
       </section>
-      <section className="documents-table">
+      <div className="news-list-switch" role="group" aria-label="เลือกรายการประกาศ"><button type="button" className={filter !== "trash" ? "active" : ""} aria-pressed={filter !== "trash"} onClick={() => selectFilter("all")}>รายการประกาศ</button><button type="button" className={filter === "trash" ? "active" : ""} aria-pressed={filter === "trash"} onClick={() => selectFilter("trash")}><Trash2 size={15}/>ถังขยะ{deletedItems.length ? ` (${deletedItems.length})` : ""}</button></div>
+      <section className="documents-table admin-data-table">
         <p className="announcements-table-scroll-hint">เลื่อนตารางซ้าย–ขวาเพื่อดูข้อมูลทั้งหมด</p>
-        <div className="documents-table-scroll" tabIndex={0}>
+        <div className="documents-table-scroll admin-data-table-scroll" tabIndex={0}>
           <table>
             <thead>
               <tr>
                 <th>ประกาศ</th>
                 <th>ลำดับ</th>
-                <th>แก้ไขล่าสุด</th>
+                <th>{filter === "trash" ? "ลบเมื่อ" : "แก้ไขล่าสุด"}</th>
                 <th>สถานะ</th>
-                <th>จัดการ</th>
+                <th className="admin-table-actions-heading">จัดการ</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <AdminTableLoadingRows columns={5} />
-              ) : items.length === 0 ? (
+              ) : filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan={5}>
                     <div className="documents-empty">
                       <Megaphone />
-                      <strong>ยังไม่มีประกาศ</strong>
-                      <p>เพิ่มประกาศสำหรับผู้เข้าชมเว็บไซต์ได้ที่นี่</p>
+                      <strong>{filter === "trash" ? "ไม่มีประกาศในถังขยะ" : "ไม่พบประกาศ"}</strong>
+                      <p>{filter === "trash" ? "รายการที่ลบจะปรากฏที่นี่เพื่อให้กู้คืนหรือลบถาวร" : "ลองเลือกสถานะอื่น หรือเพิ่มประกาศใหม่"}</p>
                     </div>
                   </td>
                 </tr>
@@ -197,16 +175,16 @@ export function AnnouncementsManager({
                     <td>
                       <div className="document-title-cell">
                         <span>
-                          {(item.status === "PUBLISHED" ? item.publishedModal?.contentMode ?? item.contentMode : item.contentMode) === "IMAGE" ? (
+                          {(filter !== "trash" && item.status === "PUBLISHED" ? item.publishedModal?.contentMode ?? item.contentMode : item.contentMode) === "IMAGE" ? (
                             <ImageIcon size={18} />
                           ) : (
                             <Megaphone size={18} />
                           )}
                         </span>
                         <div>
-                          <strong>{item.status === "PUBLISHED" ? item.publishedModal?.title ?? item.title : item.title}</strong>
+                          <strong>{filter !== "trash" && item.status === "PUBLISHED" ? item.publishedModal?.title ?? item.title : item.title}</strong>
                           <small>
-                            {item.hasUnpublishedChanges ? `ร่าง: ${item.title}` : announcementPlainText(item.description) ||
+                            {filter !== "trash" && item.hasUnpublishedChanges ? `ร่าง: ${item.title}` : announcementPlainText(item.description) ||
                               item.imageAlt ||
                               "ประกาศรูปภาพ"}
                           </small>
@@ -214,23 +192,25 @@ export function AnnouncementsManager({
                       </div>
                     </td>
                     <td>
-                      {item.status === "PUBLISHED" ? item.publishedModal?.priority ?? item.priority : item.priority}
+                      {filter !== "trash" && item.status === "PUBLISHED" ? item.publishedModal?.priority ?? item.priority : item.priority}
                     </td>
                     <td>
-                      {new Date(item.updatedAt).toLocaleDateString("th-TH")}
+                      {new Date(filter === "trash" ? item.deletedAt ?? item.updatedAt : item.updatedAt).toLocaleDateString("th-TH")}
                     </td>
                     <td>
-                      <StatusBadge
+                      {filter === "trash" ? <span className="news-deleted-status">อยู่ในถังขยะ</span> : <><StatusBadge
                         status={
                           item.status === "PUBLISHED" ? "published" : item.status === "UNPUBLISHED" ? "unpublished" : "draft"
                         }
                       />
-                        {item.hasUnpublishedChanges ? <small className="announcement-draft-indicator">มีร่างรอเผยแพร่</small> : null}
+                        {item.hasUnpublishedChanges ? <PendingDraftStatus /> : null}</>}
                     </td>
                     <td>
-                      <div className="announcement-row-actions">
+                      <div className="announcement-row-actions admin-table-actions">
+                        {filter === "trash" ? <><button type="button" disabled={pending} aria-label={`กู้คืน ${item.title}`} title="กู้คืน" onClick={() => setConfirm({ item, action: "restore" })}><RotateCcw size={17}/></button><button type="button" className="danger" disabled={pending} aria-label={`ลบ ${item.title} ถาวร`} title="ลบถาวร" onClick={() => setConfirm({ item, action: "purge" })}><Trash2 size={17}/></button></> : <>
                         <Link
                           aria-label="แก้ไข"
+                          title="แก้ไขประกาศ"
                           href={`/admin/announcements/${item.id}/edit`}
                         >
                           <Pencil size={17} />
@@ -242,6 +222,7 @@ export function AnnouncementsManager({
                               ? "ยกเลิกเผยแพร่"
                               : "เผยแพร่"
                           }
+                          title={item.status === "PUBLISHED" ? "ยกเลิกเผยแพร่" : "เผยแพร่"}
                           onClick={() =>
                             setConfirm({
                               item,
@@ -258,10 +239,12 @@ export function AnnouncementsManager({
                           className="danger"
                           disabled={pending}
                           aria-label="ลบ"
+                          title="ย้ายไปถังขยะ"
                           onClick={() => setConfirm({ item, action: "delete" })}
                         >
                           <Trash2 size={17} />
                         </button>
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -270,41 +253,34 @@ export function AnnouncementsManager({
             </tbody>
           </table>
         </div>
+        {!loading && filteredItems.length > 0 ? (
+          <AdminTablePagination page={safePage} pageCount={totalPages} pageSize={pageSize} total={filteredItems.length} label="เปลี่ยนหน้ารายการประกาศ" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
+        ) : null}
       </section>
-      {items.length > pageSize ? (
-        <div className="pages-pagination announcements-pagination">
-          <p>แสดง {pageStart + 1}–{Math.min(pageStart + pageSize, items.length)} จาก {items.length} รายการ</p>
-          <nav aria-label="เปลี่ยนหน้ารายการประกาศ">
-            <button type="button" disabled={safePage === 1 || loading} onClick={() => setCurrentPage(safePage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16}/></button>
-            {pageNumbers.map((page, index) => <span className="announcements-pagination-page" key={page}>
-              {index > 0 && page - pageNumbers[index - 1] > 1 ? <i aria-hidden="true">…</i> : null}
-              <button type="button" className={page === safePage ? "active" : ""} aria-current={page === safePage ? "page" : undefined} disabled={loading} onClick={() => setCurrentPage(page)}>{page}</button>
-            </span>)}
-            <span className="announcements-pagination-current" aria-live="polite">หน้า {safePage} จาก {totalPages}</span>
-            <button type="button" disabled={safePage === totalPages || loading} onClick={() => setCurrentPage(safePage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16}/></button>
-          </nav>
-        </div>
-      ) : null}
-      {confirm ? (
+      {confirm?.action === "purge" ? <AnnouncementPurgeDialog key={confirm.item.id} title="ลบประกาศถาวร?" description={`รายการ “${confirm.item.title}” จะกู้คืนไม่ได้ แต่รูปภาพยังอยู่ในคลังสื่อ`} pending={pending} onClose={() => { if (!requestInFlight.current) setConfirm(null); }} onConfirm={() => void act()}/> : confirm ? (
         <ConfirmDialog
           title={
             confirm.action === "delete"
-              ? "ลบประกาศ?"
+              ? "ย้ายประกาศไปถังขยะ?"
+              : confirm.action === "restore"
+                ? "กู้คืนประกาศ?"
               : confirm.action === "publish"
                 ? "เผยแพร่ประกาศ?"
                 : "ยกเลิกการเผยแพร่?"
           }
           description={
-            `รายการ “${confirm.item.title}” จะถูก${confirm.action === "delete" ? "ลบ" : confirm.action === "unpublish" ? "นำออกจากเว็บไซต์" : "แสดงบนเว็บไซต์"}`
+            confirm.action === "delete" ? `รายการ “${confirm.item.title}” จะย้ายไปถังขยะและกู้คืนได้` : confirm.action === "restore" ? `รายการ “${confirm.item.title}” จะกลับเป็นฉบับร่าง` : `รายการ “${confirm.item.title}” จะถูก${confirm.action === "unpublish" ? "นำออกจากเว็บไซต์" : "แสดงบนเว็บไซต์"}`
           }
           confirmLabel={
             confirm.action === "delete"
-              ? "ลบประกาศ"
+              ? "ย้ายไปถังขยะ"
+              : confirm.action === "restore"
+                ? "กู้คืน"
               : confirm.action === "publish"
                 ? "เผยแพร่"
                 : "ยกเลิกเผยแพร่"
           }
-          variant={confirm.action === "publish" ? "default" : "danger"}
+          variant={confirm.action === "delete" ? "danger" : "default"}
           pending={pending}
           onClose={() => { if (!requestInFlight.current) setConfirm(null); }}
           onConfirm={() => void act()}

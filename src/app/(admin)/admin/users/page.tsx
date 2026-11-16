@@ -13,10 +13,10 @@ export default function UsersPage() {
 
 function UsersTableLoading() {
   return <main className="users-manager users-table-page">
-    <header><div><small>สิทธิ์การเข้าถึง</small><h1>บัญชีผู้ใช้งาน</h1><p>จัดการบัญชี โปรไฟล์ บทบาท และหน่วยงานของบุคลากร</p></div><button type="button" className="primary-button users-add-button" disabled><Plus size={17}/>เพิ่มผู้ใช้งาน</button></header>
-    <section className="users-table-card" aria-busy="true">
+    <header><div><h1>บัญชีผู้ใช้งาน</h1><p>จัดการบัญชี โปรไฟล์ บทบาท และหน่วยงานของบุคลากร</p></div><button type="button" className="primary-button users-add-button" disabled><Plus size={17}/>เพิ่มผู้ใช้งาน</button></header>
+    <section className="users-table-card admin-data-table" aria-busy="true">
       <div className="users-table-toolbar"><div className="users-search"><Search size={17}/><input type="search" placeholder="ค้นหาชื่อ ชื่อผู้ใช้ หรืออีเมล" disabled/></div><NativeSelect defaultValue="ALL" disabled><option value="ALL">ทุกสถานะ</option><option value="ACTIVE">ใช้งาน</option><option value="DISABLED">ปิดใช้งาน</option></NativeSelect></div>
-      <div className="users-table-scroll"><table className="users-table"><thead><tr><th>ผู้ใช้งาน</th><th>ข้อมูลบุคลากร</th><th>บทบาท</th><th>สถานะ</th><th>เข้าสู่ระบบล่าสุด</th><th>จัดการ</th></tr></thead><tbody><AdminTableLoadingRows columns={6}/></tbody></table></div>
+      <div className="users-table-scroll admin-data-table-scroll"><table className="users-table"><thead><tr><th>ผู้ใช้งาน</th><th>ข้อมูลบุคลากร</th><th>บทบาท</th><th>สถานะ</th><th>เข้าสู่ระบบล่าสุด</th><th className="admin-table-actions-heading">จัดการ</th></tr></thead><tbody><AdminTableLoadingRows columns={6}/></tbody></table></div>
     </section>
   </main>;
 }

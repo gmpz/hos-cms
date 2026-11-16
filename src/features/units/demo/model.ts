@@ -73,6 +73,7 @@ export type DemoUnit = {
   hasUnpublishedChanges?: boolean;
   publishedSlug?: string | null;
   publishedAt?: string | null;
+  deletedAt?: string | null;
 };
 
 export type UnitChangeGroup = {

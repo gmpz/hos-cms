@@ -2,25 +2,27 @@ import { PublicHome } from "@/features/pages/components/public-home";
 import { PublicInitialLoading } from "@/components/public/public-page-loading";
 import { getPublishedCmsPage } from "@/server/pages/repository";
 import { connection } from "next/server";
-import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { redirectHomeToWelcomeIfNeeded } from "@/server/splash-screens/home-redirect";
-import { listActivePublicAnnouncements } from "@/server/announcements/repository";
-import { visiblePublicAnnouncements } from "@/features/announcements/public-visibility";
-import { PublicAnnouncementGate } from "@/features/announcements/components/public-announcement-gate";
+import { getInitialDocumentBlockPages } from "@/server/documents/block-page-data";
+import { getInitialNewsTabPosts } from "@/server/posts/block-tab-data";
+import { collectMediaIds } from "@/features/media/media-references";
+import { listPublicMediaItemsByIds } from "@/server/media/repository";
+import { attachResolvedMedia } from "@/server/media/resolve-references";
 
 export const instant = false;
 
 async function HomeContent() {
   await connection();
   await redirectHomeToWelcomeIfNeeded();
-  const cookieStore = await cookies();
-  const [page, announcements] = await Promise.all([getPublishedCmsPage(""), listActivePublicAnnouncements()]);
+  const page = await getPublishedCmsPage("");
   if (!page) return <p>ไม่พบหน้าแรก</p>;
-  return <>
-    <PublicAnnouncementGate announcements={visiblePublicAnnouncements(announcements, (name) => cookieStore.get(name)?.value)} showAnnouncements />
-    <PublicHome page={page}/>
-  </>;
+  const [initialDocumentPages, initialNewsTabPosts] = await Promise.all([
+    getInitialDocumentBlockPages(page.blocks),
+    getInitialNewsTabPosts(page.blocks),
+  ]);
+  const media = await listPublicMediaItemsByIds(collectMediaIds([page, initialDocumentPages]));
+  return <PublicHome page={attachResolvedMedia(page, media)} initialDocumentPages={initialDocumentPages} initialNewsTabPosts={initialNewsTabPosts}/>;
 }
 
 export default function Home() {

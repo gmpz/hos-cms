@@ -14,10 +14,11 @@ const accessChoices: { value: AccessLevel; title: string; description: string; i
   { value: "CUSTOM", title: "กำหนดผู้มีสิทธิ์", description: "เลือกอนุญาตเป็นรายหน่วยงานหรือรายบุคคล", icon: Users },
 ];
 
-export function AccessControlButton({ level, disabled, onClick }: { level: AccessLevel; disabled?: boolean; onClick: () => void }) {
+export function AccessControlButton({ level, disabled, notice, onClick }: { level: AccessLevel; disabled?: boolean; notice?: "unsaved" | "draft"; onClick: () => void }) {
   const choice = accessChoices.find((item) => item.value === level) ?? accessChoices[0];
-  return <button type="button" className="builder-access-button" disabled={disabled} onClick={onClick} title={disabled ? "หน้าแรกต้องเป็นสาธารณะ" : "กำหนดสิทธิ์การเข้าถึง"}>
-    <ShieldCheck size={16}/><span>สิทธิ์: {choice.title}</span>
+  const noticeLabel = notice === "unsaved" ? "มีการแก้ไขสิทธิ์ที่ยังไม่ได้บันทึก" : notice === "draft" ? "สิทธิ์ที่บันทึกยังไม่ได้เผยแพร่" : null;
+  return <button type="button" className="builder-access-button" disabled={disabled} onClick={onClick} title={disabled ? "หน้าแรกต้องเป็นสาธารณะ" : noticeLabel ?? "กำหนดสิทธิ์การเข้าถึง"} aria-label={`สิทธิ์: ${choice.title}${noticeLabel ? ` · ${noticeLabel}` : ""}`}>
+    <ShieldCheck size={16}/><span>สิทธิ์: {choice.title}</span>{noticeLabel ? <span className="builder-access-dirty-badge" aria-hidden="true">!</span> : null}
   </button>;
 }
 

@@ -1,17 +1,23 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { CalendarDays, Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { setActivityDateParams, type ActivityDateRange } from "../date-range";
 
-export function ActivityFilters({ query, type, types, typeLabels, range }: {
+function displayDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : "เลือกวันที่";
+}
+
+export function ActivityFilters({ query, type, types, typeLabels, range, pageSize }: {
   range: ActivityDateRange;
   query: string;
   type: string;
   types: string[];
   typeLabels: Record<string, string>;
+  pageSize: number;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,6 +37,7 @@ export function ActivityFilters({ query, type, types, typeLabels, range }: {
     setActivityDateParams(params, dates);
     if (search.trim()) params.set("q", search.trim().slice(0, 100));
     if (selectedType !== "all") params.set("type", selectedType);
+    if (pageSize !== 10) params.set("size", String(pageSize));
     startTransition(() => router.replace(`/admin/activity${params.size ? `?${params.toString()}` : ""}`, { scroll: false }));
   }
 
@@ -56,8 +63,8 @@ export function ActivityFilters({ query, type, types, typeLabels, range }: {
         event.preventDefault();
         if (start && end && start <= end) navigate(inputRef.current?.value ?? query, type, { period: "custom", start, end });
       }}>
-        <label>ตั้งแต่วันที่<input aria-label="วันที่เริ่มต้น" type="date" required value={start} max={end || undefined} onChange={(event) => setStart(event.target.value)}/></label>
-        <label>ถึงวันที่<input aria-label="วันที่สิ้นสุด" type="date" required value={end} min={start || undefined} onChange={(event) => setEnd(event.target.value)}/></label>
+        <label>ตั้งแต่วันที่<span className="activity-date-field"><span className="activity-date-display" aria-hidden="true">{displayDate(start)}<CalendarDays size={18}/></span><input aria-label="วันที่เริ่มต้น" type="date" required value={start} max={end || undefined} onChange={(event) => setStart(event.target.value)}/></span></label>
+        <label>ถึงวันที่<span className="activity-date-field"><span className="activity-date-display" aria-hidden="true">{displayDate(end)}<CalendarDays size={18}/></span><input aria-label="วันที่สิ้นสุด" type="date" required value={end} min={start || undefined} onChange={(event) => setEnd(event.target.value)}/></span></label>
         <button className="primary-button" type="submit">แสดงผล</button>
       </form> : null}
       {pending ? <span className="sr-only" role="status">กำลังโหลดบันทึกกิจกรรม...</span> : null}

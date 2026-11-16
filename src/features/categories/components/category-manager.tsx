@@ -1,7 +1,8 @@
 "use client";
+import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 
 import { showGlobalToast } from "@/components/ui/global-toast";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleCheck, CircleOff, LoaderCircle, Pencil, Plus, Search, Tags, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleCheck, CircleOff, LoaderCircle, Pencil, Plus, Search, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AdminListLoadingRows } from "@/components/admin/admin-content-loading";
@@ -11,14 +12,8 @@ import { categoriesChangedEvent, readCategories, refreshCategories, setCategorie
 import type { CategoryScope, DemoCategory } from "../types";
 
 const scopeLabels: Record<CategoryScope, string> = { posts: "ข่าว", documents: "เอกสาร" };
-const pageSize = 10;
 
-function paginationItems(current: number, total: number) {
-  if (total <= 9) return Array.from({ length: total }, (_, index) => index + 1);
-  return [...new Set([1, 2, current - 1, current, current + 1, total - 1, total])]
-    .filter((page) => page > 0 && page <= total)
-    .sort((left, right) => left - right);
-}
+
 
 export function CategoryManager({ initialScope }: { initialScope: CategoryScope }) {
   const [scope, setScope] = useState<CategoryScope>(initialScope);
@@ -30,6 +25,7 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [dialogError, setDialogError] = useState("");
   const [pending, setPending] = useState(false);
   const mutationPending = useRef(false);
@@ -125,16 +121,15 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const visible = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const pageNumbers = paginationItems(safePage, pageCount);
+
 
   return <><main className="category-manager">
-    <header><h1>จัดการหมวดหมู่</h1><p>หมวดหมู่ใช้ร่วมกันในหน้าสร้างเนื้อหา หน้า public และบล็อก Page Builder</p></header>
+    <header><div><h1>จัดการหมวดหมู่</h1><p>หมวดหมู่ใช้ร่วมกันในหน้าสร้างเนื้อหา หน้า public และบล็อก Page Builder</p></div><button type="button" className="primary-button" onClick={() => { setDialogError(""); setAddOpen(true); }}><Plus size={17}/> เพิ่มหมวดหมู่</button></header>
     <nav aria-label="ประเภทหมวดหมู่">{(["posts", "documents"] as const).map((item) => <button key={item} type="button" disabled={pending} className={scope === item ? "active" : ""} onClick={() => { if (item === scope) return; setLoading(true); setCategories([]); setUsage({}); setScope(item); setSearch(""); setPage(1); setDeleteId(null); window.history.replaceState(null, "", `/admin/categories?scope=${item}`); }}>หมวดหมู่{scopeLabels[item]}</button>)}</nav>
-    <section className="category-manager-card">
-      <div className="category-manager-toolbar"><div><h2>หมวดหมู่{scopeLabels[scope]}</h2><p>{loading ? "กำลังโหลดหมวดหมู่..." : `ทั้งหมด ${categories.length} หมวดหมู่${searching ? ` · พบ ${filtered.length} รายการ` : " · ใช้ลูกศรเพื่อจัดลำดับ"}`}</p></div><button type="button" className="primary-button" onClick={() => { setDialogError(""); setAddOpen(true); }}><Plus size={17}/> เพิ่มหมวดหมู่</button></div>
-      <div className="category-manager-search"><Search size={18}/><input type="search" aria-label={`ค้นหาหมวดหมู่${scopeLabels[scope]}`} placeholder="ค้นหาชื่อหมวดหมู่" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></div>
-      {searching ? <p className="category-manager-filter-note">ล้างคำค้นหาก่อนจัดลำดับ เพื่อให้เห็นรายการทั้งหมด</p> : null}
-      <div className="category-manager-table-scroll"><div className="category-manager-table" role="table" aria-busy={loading} aria-label={`รายการหมวดหมู่${scopeLabels[scope]}`}>
+    <div className="category-manager-search"><Search size={18}/><input type="search" aria-label={`ค้นหาหมวดหมู่${scopeLabels[scope]}`} placeholder="ค้นหาชื่อหมวดหมู่" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></div>
+    {searching ? <p className="category-manager-filter-note">ล้างคำค้นหาก่อนจัดลำดับ เพื่อให้เห็นรายการทั้งหมด</p> : null}
+    <section className="category-list-table admin-data-table">
+      <div className="admin-data-table-scroll" tabIndex={0} role="region" aria-label="ตารางหมวดหมู่ เลื่อนซ้ายขวาได้"><div className="category-manager-table admin-data-grid" role="table" aria-busy={loading} aria-label={`รายการหมวดหมู่${scopeLabels[scope]}`}>
         <div className="category-manager-table-head category-manager-table-row" role="row"><span>ลำดับ</span><span>ชื่อหมวดหมู่</span><span>เนื้อหา</span><span>สถานะ</span><span>จัดการ</span></div>
         <div className="category-manager-list" role="rowgroup">{loading ? <AdminListLoadingRows columns={5} rowClassName="category-manager-table-row"/> : visible.map((item) => {
           const index = categories.findIndex((entry) => entry.id === item.id);
@@ -147,22 +142,7 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
           </div>;
         })}{!loading && !filtered.length ? <p className="category-manager-empty">{searching ? "ไม่พบหมวดหมู่ที่ตรงกับคำค้นหา" : "ยังไม่มีหมวดหมู่"}</p> : null}</div>
       </div></div>
-      {!loading && filtered.length ? <div className="pages-pagination documents-pagination category-pagination">
-        <p>แสดง {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} จาก {filtered.length} รายการ</p>
-        <nav className="documents-pagination-full" aria-label={`เปลี่ยนหน้าหมวดหมู่${scopeLabels[scope]}`}>
-          <button type="button" disabled={safePage === 1} onClick={() => setPage(safePage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16}/></button>
-          {pageNumbers.map((pageNumber, index) => <span key={pageNumber}>
-            {index > 0 && pageNumber - pageNumbers[index - 1] > 1 ? <i>…</i> : null}
-            <button type="button" className={pageNumber === safePage ? "active" : ""} aria-current={pageNumber === safePage ? "page" : undefined} onClick={() => setPage(pageNumber)}>{pageNumber}</button>
-          </span>)}
-          <button type="button" disabled={safePage === pageCount} onClick={() => setPage(safePage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16}/></button>
-        </nav>
-        <nav className="documents-pagination-compact" aria-label={`เปลี่ยนหน้าหมวดหมู่${scopeLabels[scope]}บนจอแคบ`}>
-          <button type="button" disabled={safePage === 1} onClick={() => setPage(safePage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16}/></button>
-          <span className="documents-pagination-current" aria-live="polite">หน้า {safePage} จาก {pageCount}</span>
-          <button type="button" disabled={safePage === pageCount} onClick={() => setPage(safePage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16}/></button>
-        </nav>
-      </div> : null}
+      {!loading && filtered.length ? <AdminTablePagination className="category-list-pagination" page={safePage} pageCount={pageCount} pageSize={pageSize} total={filtered.length} label={`เปลี่ยนหน้าหมวดหมู่${scopeLabels[scope]}`} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}/> : null}
     </section>
   </main>
   {addOpen ? <CategoryDialog title={`เพิ่มหมวดหมู่${scopeLabels[scope]}`} description="ตั้งชื่อให้สั้นและชัดเจน เพื่อใช้จัดกลุ่มเนื้อหา" submitLabel="เพิ่มหมวดหมู่" defaultName="" error={dialogError} pending={pending} onNameChange={() => setDialogError("")} onClose={() => setAddOpen(false)} onSubmit={(event) => void submitName(event, "add")}/> : null}

@@ -8,24 +8,31 @@ import {
   categoryName,
   readCategories,
 } from "@/features/categories/demo/storage";
-import {
-  getDemoMediaItem,
-} from "@/features/media/demo/media-registry";
-import { publicPostsAreLoaded, readPosts, refreshPosts } from "@/features/news/demo/storage";
 import type { DemoPost } from "@/features/pages/demo/data";
 import { NewsCoverImage } from "@/features/news/components/news-cover-image";
 import type { BlockConfigMap } from "../config/types";
 import { DynamicBlockSkeleton } from "./dynamic-block-skeleton";
 
+const emptyPosts: DemoPost[] = [];
+
 export function TabbedNewsBlock({
   config,
+  initialPosts,
 }: {
   config: BlockConfigMap["newsTabs"];
+  initialPosts?: DemoPost[];
 }) {
   const [activeId, setActiveId] = useState(config.tabs[0]?.id ?? "");
-  const [posts, setPosts] = useState<DemoPost[]>(() => readPosts());
-  const [loading, setLoading] = useState(() => !publicPostsAreLoaded());
+  const firstTab = config.tabs[0];
+  const firstKey = firstTab ? JSON.stringify([firstTab.source, firstTab.categoryId]) : "";
+  const [postsByTab, setPostsByTab] = useState<Record<string, DemoPost[]>>(() =>
+    firstTab && initialPosts ? { [firstKey]: initialPosts } : {});
+  const [failedKey, setFailedKey] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
   const [categories, setCategories] = useState(() => readCategories("posts"));
+  const activeTab = config.tabs.find((tab) => tab.id === activeId) ?? firstTab;
+  const activeKey = activeTab ? JSON.stringify([activeTab.source, activeTab.categoryId]) : "";
+  const items = activeTab ? postsByTab[activeKey] : emptyPosts;
   const tabsRef = useRef<HTMLDivElement>(null);
   const [tabScroll, setTabScroll] = useState({
     overflow: false,
@@ -45,24 +52,36 @@ export function TabbedNewsBlock({
     });
   }, []);
   useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      setPosts(readPosts());
-      setCategories(readCategories("posts"));
-    };
-    void refreshPosts().then((items) => {
-      if (active) setPosts(items);
-    }).catch(() => undefined).finally(() => {
-      if (active) setLoading(false);
-    });
-    window.addEventListener("hos-posts-change", refresh);
+    const refresh = () => setCategories(readCategories("posts"));
     window.addEventListener(categoriesChangedEvent, refresh);
     return () => {
-      active = false;
-      window.removeEventListener("hos-posts-change", refresh);
       window.removeEventListener(categoriesChangedEvent, refresh);
     };
   }, []);
+  useEffect(() => {
+    if (!activeTab || items !== undefined || failedKey === activeKey) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ source: activeTab.source.kind });
+    if (activeTab.source.kind === "unit") params.set("unit", activeTab.source.unitId);
+    if (activeTab.categoryId) params.set("category", activeTab.categoryId);
+    void fetch(`/api/posts/block-tab?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("โหลดข่าวไม่สำเร็จ");
+        const payload: unknown = await response.json();
+        if (!Array.isArray(payload) || !payload.every((post) =>
+          typeof post === "object" && post !== null && typeof post.id === "string" &&
+          typeof post.slug === "string" && typeof post.title === "string"))
+          throw new Error("ข้อมูลข่าวไม่ถูกต้อง");
+        return payload as DemoPost[];
+      })
+      .then((posts) => {
+        if (!controller.signal.aborted) setPostsByTab((previous) => ({ ...previous, [activeKey]: posts }));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setFailedKey(activeKey);
+      });
+    return () => controller.abort();
+  }, [activeKey, activeTab, failedKey, items, retryCount]);
   useEffect(() => {
     const element = tabsRef.current;
     if (!element) return;
@@ -79,27 +98,8 @@ export function TabbedNewsBlock({
       behavior: "smooth",
     });
   };
-  if (loading) return <DynamicBlockSkeleton layout="cards" tabs={config.tabs.length} items={4} label="กำลังโหลดแท็บข่าว" />;
-  const activeTab =
-    config.tabs.find((tab) => tab.id === activeId) ?? config.tabs[0];
-  const items = posts
-    .filter(
-      (post) => {
-        const matchesOwner =
-          !activeTab ||
-          activeTab.source.kind === "all" ||
-          (activeTab.source.kind === "hospital"
-            ? post.unitId === null
-            : post.unitId === activeTab.source.unitId);
-
-        return (
-          post.status === "published" &&
-          matchesOwner &&
-          (!activeTab?.categoryId || post.categoryId === activeTab.categoryId)
-        );
-      },
-    )
-    .slice(0, 4);
+  if (items === undefined && activeId === firstTab?.id && failedKey !== activeKey)
+    return <DynamicBlockSkeleton layout="cards" tabs={config.tabs.length} items={4} label="กำลังโหลดแท็บข่าว" />;
   return (
     <section className="tabbed-news-block">
       <header>
@@ -118,15 +118,27 @@ export function TabbedNewsBlock({
       <div
         className={`tabbed-news-tabs-shell${tabScroll.overflow ? " has-overflow" : ""}${tabScroll.left ? " can-scroll-left" : ""}${tabScroll.right ? " can-scroll-right" : ""}`}
       >
-        {tabScroll.left ? (
-          <button
-            type="button"
-            className="tabbed-news-tabs-arrow is-left"
-            aria-label="เลื่อนแท็บไปทางซ้าย"
-            onClick={() => scrollTabs(-1)}
-          >
-            <ChevronLeft size={18} aria-hidden />
-          </button>
+        {tabScroll.overflow ? (
+          <div className="block-tabs-controls" aria-label="เลื่อนแท็บข่าว">
+            <button
+              type="button"
+              className="tabbed-news-tabs-arrow is-left"
+              aria-label="เลื่อนแท็บไปทางซ้าย"
+              disabled={!tabScroll.left}
+              onClick={() => scrollTabs(-1)}
+            >
+              <ChevronLeft size={18} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="tabbed-news-tabs-arrow is-right"
+              aria-label="เลื่อนแท็บไปทางขวา"
+              disabled={!tabScroll.right}
+              onClick={() => scrollTabs(1)}
+            >
+              <ChevronRight size={18} aria-hidden />
+            </button>
+          </div>
         ) : null}
         <div
           ref={tabsRef}
@@ -155,25 +167,21 @@ export function TabbedNewsBlock({
             </button>
           ))}
         </div>
-        {tabScroll.right ? (
-          <button
-            type="button"
-            className="tabbed-news-tabs-arrow is-right"
-            aria-label="เลื่อนแท็บไปทางขวา"
-            onClick={() => scrollTabs(1)}
-          >
-            <ChevronRight size={18} aria-hidden />
-          </button>
-        ) : null}
       </div>
-      {items.length ? (
+      {items === undefined && failedKey !== activeKey ? (
+        <div className="tabbed-news-empty" role="status" aria-live="polite">กำลังโหลดข่าว...</div>
+      ) : failedKey === activeKey ? (
+        <div className="tabbed-news-empty" role="tabpanel">
+          <strong>โหลดข่าวไม่สำเร็จ</strong>
+          <button type="button" onClick={() => { setFailedKey(""); setRetryCount((count) => count + 1); }}>ลองอีกครั้ง</button>
+        </div>
+      ) : items?.length ? (
         <div className="tabbed-news-content" role="tabpanel">
           <Link
             className="tabbed-news-featured"
             href={`/news/${items[0].slug}`}
           >
             <NewsCover
-              mediaId={items[0].coverMediaId}
               post={items[0]}
               title={items[0].title}
               show={config.showImage}
@@ -201,7 +209,6 @@ export function TabbedNewsBlock({
             {items.slice(1, 4).map((post) => (
               <Link href={`/news/${post.slug}`} key={post.id}>
                 <NewsCover
-                  mediaId={post.coverMediaId}
                   post={post}
                   title={post.title}
                   show={config.showImage}
@@ -235,28 +242,26 @@ export function TabbedNewsBlock({
 }
 
 function NewsCover({
-  mediaId,
   post,
   title,
   show,
 }: {
-  mediaId: string | null;
   post: DemoPost;
   title: string;
   show: boolean;
 }) {
   if (!show) return null;
-  const media = getDemoMediaItem(mediaId);
+  const coverUrl = post.coverImageUrl;
   return (
     <span
-      className={`tabbed-news-cover news-cover-viewport ${media ? "" : "fallback-logo"}`}
+      className={`tabbed-news-cover news-cover-viewport ${coverUrl ? "" : "fallback-logo"}`}
       style={
-        media
+        coverUrl
           ? undefined
           : { backgroundImage: "url(/hospital-logo.png)" }
       }
       role="img"
       aria-label={`ภาพประกอบ ${title}`}
-    >{media ? <NewsCoverImage post={post} media={media} /> : null}</span>
+    >{coverUrl ? <NewsCoverImage post={post} src={coverUrl} /> : null}</span>
   );
 }

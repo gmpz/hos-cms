@@ -1,5 +1,7 @@
 "use client";
 
+import { createId } from "@/utils/create-id";
+
 import { DragDropContext, Draggable, Droppable, type DropResult } from "@hello-pangea/dnd";
 import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -69,7 +71,7 @@ export function StatisticsSettings({ config, onChange }: {
         <strong>รายการสถิติ ({config.items.length}/12)</strong>
         <button type="button" disabled={config.items.length >= 12} onClick={() => onChange({
           ...config,
-          items: [...config.items, { id: crypto.randomUUID(), value: "0", label: "รายการใหม่", description: "", icon: "activity" }],
+          items: [...config.items, { id: createId(), value: "0", label: "รายการใหม่", description: "", icon: "activity" }],
         })}><Plus size={13} /> เพิ่มรายการ</button>
       </div>
       <DragDropContext onDragEnd={reorderItems}>

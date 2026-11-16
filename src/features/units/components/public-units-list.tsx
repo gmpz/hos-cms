@@ -4,20 +4,15 @@ import Link from "next/link";
 import { ArrowRight, Building2, Search, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PublicPagination } from "@/components/public/public-pagination";
-import { getDemoMediaItem, mediaPreviewStyle } from "@/features/media/demo/media-registry";
-import { useMediaRevision } from "@/features/media/use-media-revision";
 import type { DemoUnit } from "../demo/model";
 import { readUnits, refreshUnits, unitsLoaded } from "../demo/storage";
 import { unitCoverStyle } from "./unit-cover-style";
 
 const pageSize = 12;
-// Temporary delay for previewing the units skeleton.
-const unitsLoadingPreviewDelayMs = 1500;
 
-export function PublicUnitsList() {
-  useMediaRevision();
-  const [units, setUnits] = useState<DemoUnit[]>([]);
-  const [loading, setLoading] = useState(true);
+export function PublicUnitsList({ initialUnits = [] }: { initialUnits?: DemoUnit[] }) {
+  const [units, setUnits] = useState<DemoUnit[]>(initialUnits);
+  const [loading, setLoading] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -42,16 +37,11 @@ export function PublicUnitsList() {
   }, [loading]);
   useEffect(() => {
     let active = true;
-    let previewReady = false;
     const refresh = () => {
-      if (!active || !previewReady) return;
+      if (!active) return;
       setUnits(readUnits());
       if (unitsLoaded()) setLoading(false);
     };
-    const previewTimer = window.setTimeout(() => {
-      previewReady = true;
-      refresh();
-    }, unitsLoadingPreviewDelayMs);
     refresh();
     void refreshUnits().catch(() => {
       if (!active) return;
@@ -62,7 +52,6 @@ export function PublicUnitsList() {
     window.addEventListener("hos-units-change", refresh);
     return () => {
       active = false;
-      window.clearTimeout(previewTimer);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("hos-units-change", refresh);
     };
@@ -106,8 +95,7 @@ function UnitCardSkeletonGrid() {
 }
 
 function UnitCard({ unit }: { unit: DemoUnit }) {
-  const cover = getDemoMediaItem(unit.coverMediaId);
-  const coverStyle = unit.coverImageUrl ? { backgroundImage: `url(${unit.coverImageUrl})` } : mediaPreviewStyle(cover);
+  const coverStyle = unit.coverImageUrl ? { backgroundImage: `url(${unit.coverImageUrl})` } : undefined;
   return <Link className="public-unit-card" href={`/units/${unit.slug}`}>
     <span className={`public-unit-card-cover ${coverStyle ? "has-cover" : "fallback"}`}>
       {coverStyle ? <span className="unit-cover-image-layer" style={unitCoverStyle(coverStyle, unit.coverFocus ?? { x: 50, y: 50 })} aria-hidden="true"/> : <Building2 size={38}/>}

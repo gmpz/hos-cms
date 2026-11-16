@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { currentUser } from "@/server/auth/session";
-import { AnnouncementInputError, createAnnouncement, listAnnouncements } from "@/server/announcements/repository";
+import { AnnouncementInputError, createAnnouncement, listAnnouncements, listDeletedAnnouncements } from "@/server/announcements/repository";
 
 async function administrator() {
   const user = await currentUser();
   return user?.role === "ADMIN" && !user.mustChangePassword ? user : null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!await administrator()) return NextResponse.json({ error: "ไม่มีสิทธิ์ดูประกาศ" }, { status: 401 });
-  return NextResponse.json(await listAnnouncements(), { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json(await (new URL(request.url).searchParams.get("trash") === "1" ? listDeletedAnnouncements() : listAnnouncements()), { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {

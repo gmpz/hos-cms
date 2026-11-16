@@ -3,6 +3,7 @@
 import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Bold, Italic, List, ListOrdered, Redo2, Undo2 } from "lucide-react";
+import { useEffect } from "react";
 import { announcementContentDocument, serializeAnnouncementContent } from "../announcement-content";
 
 export function AnnouncementRichTextEditor({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
@@ -13,6 +14,11 @@ export function AnnouncementRichTextEditor({ value, onChange, label }: { value: 
     editorProps: { attributes: { "aria-label": label, class: "announcement-rich-text-content" } },
     onUpdate: ({ editor: current }) => onChange(serializeAnnouncementContent(current.getJSON())),
   });
+  useEffect(() => {
+    if (editor && serializeAnnouncementContent(editor.getJSON()) !== value) {
+      editor.commands.setContent(announcementContentDocument(value), { emitUpdate: false });
+    }
+  }, [editor, value]);
   const state = useEditorState({
     editor,
     selector: ({ editor: current }) => ({

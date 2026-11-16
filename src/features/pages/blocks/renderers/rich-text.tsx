@@ -2,6 +2,7 @@ import type { JSONContent } from "@tiptap/react";
 import type { ReactNode } from "react";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
 import { getDemoMediaItem } from "@/features/media/demo/media-registry";
+import { displayMediaFor } from "@/features/media/resolved-media";
 
 export function RichText({ content }: { content: JSONContent }) {
   return <div className="rich-text-content">{content.content?.map((node, index) => <Node key={index} node={node} />)}</div>;
@@ -20,7 +21,7 @@ function Node({ node }: { node: JSONContent }): ReactNode {
       if (mark.type === "highlight") result = <mark style={{ backgroundColor: safeHighlightColor(mark.attrs?.color) }}>{result}</mark>;
       if (mark.type === "link") {
         const href = mark.attrs?.href;
-        const media = linkedMedia(href);
+        const media = linkedMedia(mark.attrs);
         result = media ? (
           <DocumentFileLink media={media}>{result}</DocumentFileLink>
         ) : (
@@ -114,8 +115,11 @@ function tableColumns(table: JSONContent): Array<number | null> {
   });
 }
 
-function linkedMedia(value: unknown) {
+function linkedMedia(attrs: Record<string, unknown> | undefined) {
+  const value = attrs?.href;
   if (typeof value !== "string" || !value.startsWith("#media:")) return null;
-  const media = getDemoMediaItem(value.slice("#media:".length));
+  const media = "mediaAsset" in (attrs ?? {})
+    ? displayMediaFor(attrs, "mediaId")
+    : getDemoMediaItem(value.slice("#media:".length));
   return media?.mimeType === "application/pdf" ? media : null;
 }

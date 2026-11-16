@@ -40,6 +40,7 @@ async function ActivityDetailContent({ params, searchParams }: Props) {
   if (typeof filters.q === "string" && filters.q.trim()) backParams.set("q", filters.q.trim().slice(0, 100));
   if (typeof filters.type === "string" && filters.type) backParams.set("type", filters.type);
   if (typeof filters.page === "string" && /^\d+$/.test(filters.page) && Number(filters.page) > 1) backParams.set("page", filters.page);
+  if (typeof filters.size === "string" && ["20", "50"].includes(filters.size)) backParams.set("size", filters.size);
   const backHref = `/admin/activity${backParams.size ? `?${backParams.toString()}` : ""}`;
   const formattedDate = new Intl.DateTimeFormat("th-TH", { dateStyle: "full", timeStyle: "medium", timeZone: "Asia/Bangkok" }).format(activity.occurredAt);
 

@@ -1,6 +1,9 @@
 "use client";
 
+import { createId } from "@/utils/create-id";
+
 import { AdminContentLoading } from "@/components/admin/admin-content-loading";
+import { PublishDropdown } from "@/components/admin/publish-dropdown";
 import { NativeSelect } from "@/components/ui/native-select";
 
 import {
@@ -12,8 +15,6 @@ import {
 import {
   ArrowLeft,
   CalendarDays,
-  CircleAlert,
-  CircleCheck,
   Copy,
   Eye,
   EyeOff,
@@ -34,6 +35,7 @@ import {
   Paperclip,
   PanelsTopLeft,
   Quote,
+  RotateCcw,
   Save,
   Search,
   Send,
@@ -58,13 +60,14 @@ import {
   useSyncExternalStore,
 } from "react";
 import { MediaPicker } from "@/features/media/components/media-picker";
-import { useMediaRevision } from "@/features/media/use-media-revision";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import {
-  getDemoMediaItem,
+  seedDemoMediaItems,
 } from "@/features/media/demo/media-registry";
+import type { UploadedMediaItem } from "@/features/media/upload-media-file";
 import type { DemoPost } from "@/features/pages/demo/data";
 import { createBlock, type BuilderBlock } from "@/features/pages/demo/model";
-import { BlockSettings } from "@/features/pages/components/home-builder";
+import { BlockSettings, DocumentListCanvasEditor } from "@/features/pages/components/home-builder";
 import { RichTextEditor } from "@/features/pages/blocks/editors/rich-text-editor-client";
 import { TableCanvasEditor } from "@/features/pages/blocks/editors/table-canvas-editor";
 import type { ArticleBlock as SharedArticleBlock } from "@/features/pages/blocks/config/types";
@@ -234,7 +237,6 @@ function NewsBlockLayers({ blocks, selectedId, draftLabels, onSelect, onReorder,
 
 export function NewsEditor({ postId }: { postId: string | null }) {
   const router = useRouter();
-  useMediaRevision();
   const [ownerUnits, setOwnerUnits] = useState<DemoUnit[]>(() => readUnits(true));
   useEffect(() => { void refreshUnits(true).then(setOwnerUnits).catch(() => undefined); }, []);
   const ready = useSyncExternalStore(
@@ -257,6 +259,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
   const [confirmSave, setConfirmSave] = useState(false);
   const [confirmRemoveCover, setConfirmRemoveCover] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
   const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null);
   const allowLeaveRef = useRef(false);
@@ -265,6 +268,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const hasChanges = JSON.stringify(post) !== savedSnapshot;
+  const hasSavedDraft = post.id !== "new-post" && (post.status === "draft" || Boolean(post.hasUnpublishedChanges));
   const shouldWarnOnLeave = ready && !loadingPost && !loadError && (hasChanges || post.id === "new-post");
   useEffect(() => {
     if (!shouldWarnOnLeave) return;
@@ -323,9 +327,12 @@ export function NewsEditor({ postId }: { postId: string | null }) {
     void fetch(`/api/posts/${postId}`, { cache: "no-store" }).then(async (response) => {
       const payload: unknown = await response.json();
       if (!response.ok) throw new Error(typeof payload === "object" && payload !== null && "error" in payload && typeof payload.error === "string" ? payload.error : "โหลดข่าวไม่สำเร็จ");
-      return payload as DemoPost;
-    }).then((saved) => {
+      if (typeof payload !== "object" || payload === null || !("post" in payload) || !("media" in payload) || !Array.isArray(payload.media))
+        throw new Error("ข้อมูลข่าวไม่ถูกต้อง");
+      return payload as { post: DemoPost; media: UploadedMediaItem[] };
+    }).then(({ post: saved, media }) => {
       if (!active) return;
+      seedDemoMediaItems(media);
       setPost(saved); setSavedSnapshot(JSON.stringify(saved));
     }).catch((error: unknown) => {
       if (active) setLoadError(error instanceof Error ? error.message : "โหลดข่าวไม่สำเร็จ");
@@ -359,13 +366,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
     else if (publishedIndex !== index || JSON.stringify(publishedBlocks[publishedIndex]) !== JSON.stringify(block))
       draftLabels.set(block.id, savedBlock && JSON.stringify(savedBlock) === JSON.stringify(block) ? "ร่างที่ยังไม่เผยแพร่" : "ยังไม่บันทึก");
   }
-  const saveStatus = hasChanges || post.id === "new-post" ? "unsaved" : post.status === "draft" || post.hasUnpublishedChanges ? "draft" : "published";
-  const saveStatusLabel = saveStatus === "unsaved"
-    ? post.id === "new-post" && !hasChanges ? "ข่าวนี้ยังไม่ได้บันทึก" : "มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก"
-    : saveStatus === "draft"
-      ? post.status === "published" ? "บันทึกการเปลี่ยนแปลงแล้ว รอเผยแพร่ หน้าเว็บไซต์ยังแสดงเวอร์ชันเดิม" : "บันทึกเป็นฉบับร่างแล้ว ยังไม่แสดงบนเว็บไซต์"
-      : "เผยแพร่เวอร์ชันล่าสุดแล้ว";
-  const cover = getDemoMediaItem(post.coverMediaId);
+  const cover = displayMediaFor(post, "coverMediaId");
   const category = categoryName(readCategories("posts"), post.categoryId);
   const ownerName = ownerUnits.find((unit) => unit.id === post.unitId)?.name ?? "โรงพยาบาล";
   function patch(value: Partial<DemoPost>) {
@@ -377,7 +378,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
     });
   }
   function addBlock(type: ArticleKind, index = blocks.length) {
-    const block = createArticleBlock(type, crypto.randomUUID());
+    const block = createArticleBlock(type, createId());
     patch({
       blocks: [...blocks.slice(0, index), block, ...blocks.slice(index)],
     });
@@ -390,7 +391,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
     if (!source) return;
     const copy = {
       ...structuredClone(source),
-      id: crypto.randomUUID(),
+      id: createId(),
     } as ArticleBlock;
     patch({
       blocks: [
@@ -439,7 +440,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
     if (saving) return;
     if (!readCategories("posts").some((item) => item.id === post.categoryId && item.active)) {
       setMetaOpen(true);
-      setToast({ id: crypto.randomUUID(), title: "บันทึกไม่สำเร็จ", description: "กรุณาเพิ่มและเลือกหมวดหมู่ข่าวก่อน", variant: "error" });
+      setToast({ id: createId(), title: "บันทึกไม่สำเร็จ", description: "กรุณาเพิ่มและเลือกหมวดหมู่ข่าวก่อน", variant: "error" });
       return;
     }
     const isNewPost = post.id === "new-post";
@@ -468,12 +469,12 @@ export function NewsEditor({ postId }: { postId: string | null }) {
       const saved = await savePost(next, publish);
       setPost(saved);
       setSavedSnapshot(JSON.stringify(saved));
-      setToast({ id: crypto.randomUUID(), title: publish ? "เผยแพร่ข่าวแล้ว" : "บันทึกร่างข่าวแล้ว", description: publish ? `“${saved.title}” แสดงบนเว็บไซต์เรียบร้อยแล้ว` : saved.status === "published" ? `บันทึกการแก้ไข “${saved.title}” แล้ว หน้าเว็บไซต์ยังแสดงเวอร์ชันเดิม` : `บันทึก “${saved.title}” เป็นฉบับร่างเรียบร้อยแล้ว`, variant: "success" });
+      setToast({ id: createId(), title: publish ? "เผยแพร่ข่าวแล้ว" : "บันทึกร่างข่าวแล้ว", description: publish ? `“${saved.title}” แสดงบนเว็บไซต์เรียบร้อยแล้ว` : saved.status === "published" ? `บันทึกการแก้ไข “${saved.title}” แล้ว หน้าเว็บไซต์ยังแสดงเวอร์ชันเดิม` : `บันทึก “${saved.title}” เป็นฉบับร่างเรียบร้อยแล้ว`, variant: "success" });
       if (isNewPost) {
         window.history.replaceState(null, "", `/admin/posts/${saved.id}/edit`);
       }
     } catch (error) {
-      setToast({ id: crypto.randomUUID(), title: publish ? "เผยแพร่ไม่สำเร็จ" : "บันทึกไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
+      setToast({ id: createId(), title: publish ? "เผยแพร่ไม่สำเร็จ" : "บันทึกไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
     } finally {
       setSaving(false);
     }
@@ -489,9 +490,23 @@ export function NewsEditor({ postId }: { postId: string | null }) {
       setSelectedBlockId(null);
       setSettingsBlockId(null);
       setConfirmDiscardDraft(false);
-      setToast({ id: crypto.randomUUID(), title: "ทิ้งร่างแล้ว", description: "กลับไปใช้ฉบับที่เผยแพร่อยู่ เว็บไซต์ไม่เปลี่ยนแปลง", variant: "success" });
+      setToast({ id: createId(), title: "ทิ้งร่างแล้ว", description: "กลับไปใช้ฉบับที่เผยแพร่อยู่ เว็บไซต์ไม่เปลี่ยนแปลง", variant: "success" });
     } catch (error) {
-      setToast({ id: crypto.randomUUID(), title: "ทิ้งร่างไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
+      setToast({ id: createId(), title: "ทิ้งร่างไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
+    } finally { setSaving(false); }
+  }
+  async function unpublish() {
+    if (saving || post.status !== "published") return;
+    setSaving(true);
+    try {
+      const updated = await actOnPost(post, "unpublish");
+      if (!updated) throw new Error("ยกเลิกเผยแพร่ไม่สำเร็จ");
+      setPost(updated);
+      setSavedSnapshot(JSON.stringify(updated));
+      setConfirmUnpublish(false);
+      setToast({ id: createId(), title: "ยกเลิกเผยแพร่แล้ว", description: `“${updated.title}” ไม่แสดงบนเว็บไซต์แล้ว`, variant: "success" });
+    } catch (error) {
+      setToast({ id: createId(), title: "ยกเลิกเผยแพร่ไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่", variant: "error" });
     } finally { setSaving(false); }
   }
   return (
@@ -506,6 +521,15 @@ export function NewsEditor({ postId }: { postId: string | null }) {
           <p>ข้อมูลข่าวและเนื้อหาแบบ Block</p>
         </div>
       </header>
+      {ready && !loadingPost && !loadError && (shouldWarnOnLeave || hasSavedDraft) ? (
+        <section className="splash-draft-notice" aria-live="polite">
+          <div>
+            <strong>{hasChanges ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : post.id === "new-post" ? "ข่าวนี้ยังไม่ได้บันทึก" : post.hasUnpublishedChanges ? "มีร่างที่บันทึกแล้ว ยังไม่ได้เผยแพร่" : "บันทึกร่างแล้ว ยังไม่ได้เผยแพร่"}</strong>
+            {hasSavedDraft && savedPost.updatedAt ? <p>บันทึกล่าสุด {savedPost.updatedAt} · {post.status === "published" ? "หน้าเว็บไซต์ยังแสดงฉบับเดิม" : "ข่าวนี้ยังไม่แสดงบนเว็บไซต์"}</p> : null}
+          </div>
+          {post.status === "published" && post.hasUnpublishedChanges ? <button type="button" disabled={saving} onClick={() => setConfirmDiscardDraft(true)}><RotateCcw size={16}/>ยกเลิกร่างที่บันทึก</button> : null}
+        </section>
+      ) : null}
       <section className="news-meta-card">
         <label className="news-title-input">
           <span>ชื่อข่าว</span>
@@ -552,7 +576,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
                           >
                             <div className="article-block-actions" aria-label={`เครื่องมือ ${articleKinds.find((item) => item.type === block.type)?.label ?? "Block"}`}>
                               <span {...drag.dragHandleProps}>
-                                <GripVertical size={16} />
+                                <GripVertical size={15} />
                               </span>
                               <button type="button" onClick={() => setSettingsBlockId(block.id)} aria-label={`ตั้งค่า ${articleKinds.find((item) => item.type === block.type)?.label ?? "Block"}`} title="ตั้งค่า Block"><Settings2 size={14} /></button>
                               <button
@@ -608,6 +632,10 @@ export function NewsEditor({ postId }: { postId: string | null }) {
                               ) : block.type === "table" ? (
                                 <section className={blockContainerClassName(block)}>
                                   <TableCanvasEditor config={block.config} onChange={(config) => updateBlock({ ...block, config })} />
+                                </section>
+                              ) : block.type === "documentList" ? (
+                                <section className={blockContainerClassName(block)}>
+                                  <DocumentListCanvasEditor config={block.config} onChange={(config) => updateBlock({ ...block, config })} />
                                 </section>
                               ) : (
                                 <BlockRenderer blocks={[block]} adminPreview pdfPositionOnly />
@@ -683,25 +711,21 @@ export function NewsEditor({ postId }: { postId: string | null }) {
           <button type="button" aria-label="ดูตัวอย่าง" onClick={() => setPreviewMode("desktop")}><Eye size={17}/><span className="news-toolbar-label">ดูตัวอย่าง</span></button>
         </div>
         <div className="news-editor-toolbar-actions">
-          {post.status === "published" && post.hasUnpublishedChanges ? <button type="button" className="news-discard-draft" aria-label="ทิ้งร่าง" disabled={saving} onClick={() => setConfirmDiscardDraft(true)}><Trash2 size={16}/><span className="news-toolbar-label">ทิ้งร่าง</span></button> : null}
-          <details className={`news-editor-toolbar-status is-${saveStatus}`}>
-            <summary aria-label={saveStatusLabel}>
-              {saveStatus === "unsaved" ? <CircleAlert size={18} aria-hidden="true" /> : saveStatus === "draft" ? <FilePenLine size={18} aria-hidden="true" /> : <CircleCheck size={18} aria-hidden="true" />}
-            </summary>
-            <span className="news-editor-toolbar-tooltip" role="tooltip">{saveStatusLabel}</span>
-          </details>
           <button type="button" aria-label="บันทึก" disabled={saving || !hasChanges} onClick={() => setConfirmSave(true)}><Save size={16}/><span className="news-toolbar-label">บันทึก</span></button>
+          <div className="admin-publish-split">
             <button
               type="button"
               className="primary-button"
-              aria-label={post.status === "published" ? "เผยแพร่การเปลี่ยนแปลง" : "เผยแพร่"}
+              aria-label="เผยแพร่"
               disabled={saving || (post.status === "published" && !hasChanges && !post.hasUnpublishedChanges)}
               onClick={() => setConfirmPublish(true)}
             >
               <Send size={15} />
-              <span className="news-toolbar-publish-desktop">{post.status === "published" ? "เผยแพร่การเปลี่ยนแปลง" : "เผยแพร่"}</span>
+              <span className="news-toolbar-publish-desktop">เผยแพร่</span>
               <span className="news-toolbar-publish-mobile">เผยแพร่</span>
             </button>
+            {post.status === "published" ? <PublishDropdown disabled={saving} onUnpublish={() => setConfirmUnpublish(true)}/> : null}
+          </div>
         </div>
       </div>
       {insertAt !== null ? (
@@ -798,10 +822,11 @@ export function NewsEditor({ postId }: { postId: string | null }) {
         onClose={() => setConfirmPublish(false)}
         onConfirm={() => { setConfirmPublish(false); void persist(true); }}
       /> : null}
+      {confirmUnpublish ? <ConfirmDialog title="ยกเลิกเผยแพร่ข่าว?" description={`“${post.title}” จะไม่แสดงบนเว็บไซต์ การแก้ไขที่ยังไม่ได้บันทึกจะหายไป`} confirmLabel="ยกเลิกเผยแพร่" pending={saving} onClose={() => setConfirmUnpublish(false)} onConfirm={() => { void unpublish(); }}/> : null}
       {confirmDiscardDraft ? <ConfirmDialog
-        title="ทิ้งร่างข่าว?"
+        title="ยกเลิกร่างที่บันทึกไว้?"
         description="การแก้ไขที่ยังไม่ได้เผยแพร่ทั้งหมด รวมถึงบล็อกและข้อมูลข่าว จะถูกลบและคืนค่าเป็นฉบับที่เผยแพร่อยู่ การดำเนินการนี้ย้อนกลับไม่ได้"
-        confirmLabel="ทิ้งร่าง"
+        confirmLabel="ยกเลิกร่าง"
         pending={saving}
         onClose={() => setConfirmDiscardDraft(false)}
         onConfirm={() => { void discardDraft(); }}

@@ -3,6 +3,7 @@ import type { JSONContent } from "@tiptap/react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowRight,
+  CalendarDays,
   Download,
   FileText,
   Clock3,
@@ -13,10 +14,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { DemoDocument } from "@/features/documents/demo/model";
+import { DocumentNewBadge } from "@/features/documents/components/document-new-badge";
 import { readDocuments, refreshDocuments } from "@/features/documents/demo/storage";
 import { documentFileUrl } from "@/features/documents/document-file-name";
+import { documentMedia } from "@/features/documents/document-media";
 import {
-  getDemoMediaItem,
   mediaPreviewStyle,
 } from "@/features/media/demo/media-registry";
 import { useLinkTargetResolver } from "@/features/navigation/link-target-catalog-context";
@@ -38,15 +40,15 @@ import {
 import { NavigationIcon } from "@/features/navigation/navigation-icons";
 import { readUnits, refreshUnits, unitsLoaded } from "../demo/storage";
 import { personnelPhotoPositionStyle } from "./personnel-photo-position";
-import { useMediaRevision } from "@/features/media/use-media-revision";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import { PublicUnitLoading } from "@/components/public/public-page-loading";
 export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUnit?: DemoUnit }) {
-  useMediaRevision();
   const pageRef = useRef<HTMLElement>(null);
   const [unit, setUnit] = useState<DemoUnit | null>(previewUnit ?? null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(previewUnit ? "ready" : "loading");
   const [posts, setPosts] = useState<DemoPost[]>([]);
   const [documents, setDocuments] = useState<DemoDocument[]>([]);
+  const [documentsLoaded, setDocumentsLoaded] = useState(false);
   useEffect(() => {
     let active = true;
     const markReady = () => {
@@ -69,7 +71,7 @@ export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUni
       });
     }
     void refreshPosts().catch(() => undefined);
-    void refreshDocuments().catch(() => undefined);
+    void refreshDocuments().catch(() => undefined).finally(() => { if (active) setDocumentsLoaded(true); });
     window.addEventListener("storage", refresh);
     window.addEventListener("hos-units-change", refresh);
     window.addEventListener("hos-posts-change", refresh);
@@ -172,6 +174,7 @@ export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUni
             unit={unit}
             posts={posts}
             documents={documents}
+            documentsLoaded={documentsLoaded}
             muted={unit.sectionBackground[section]}
           />
         ))}
@@ -188,12 +191,14 @@ function UnitPublicSection({
   unit,
   posts,
   documents,
+  documentsLoaded,
   muted,
 }: {
   section: UnitSection;
   unit: DemoUnit;
   posts: DemoPost[];
   documents: DemoDocument[];
+  documentsLoaded: boolean;
   muted: boolean;
 }) {
   const resolveTarget = useLinkTargetResolver();
@@ -268,7 +273,7 @@ function UnitPublicSection({
         {unit.personnel.length ? (
           <div className="unit-person-grid">
             {unit.personnel.map((person) => {
-              const photo = getDemoMediaItem(person.mediaId);
+              const photo = displayMediaFor(person);
               return (
                 <article key={person.id}>
                   <div
@@ -338,6 +343,7 @@ function UnitPublicSection({
       <UnitDocumentsSection
         unit={unit}
         documents={documents}
+        documentsLoaded={documentsLoaded}
         muted={muted}
       />
     );
@@ -413,10 +419,12 @@ function UnitPublicSection({
 function UnitDocumentsSection({
   unit,
   documents,
+  documentsLoaded,
   muted,
 }: {
   unit: DemoUnit;
   documents: DemoDocument[];
+  documentsLoaded: boolean;
   muted: boolean;
 }) {
   const unitDocuments = documents.filter(
@@ -437,18 +445,20 @@ function UnitDocumentsSection({
           ดูเอกสารทั้งหมด →
         </Link>
       </div>
-      {unitDocuments.length ? (
+      {!documentsLoaded ? (
+        <div className="unit-empty-state" role="status"><p>กำลังโหลดเอกสาร...</p></div>
+      ) : unitDocuments.length ? (
         <>
           <div className="unit-document-list">
             {visibleDocuments.map((document, index) => {
-              const media = getDemoMediaItem(document.mediaIds[0] ?? null);
+              const media = documentMedia(document);
               const revealStyle = { "--document-reveal-delay": `${Math.min(index, 15) * 90}ms` } as CSSProperties;
               if (media && isPdfFile(media))
                 return (
                   <div className="unit-document-row-with-download" key={document.id} style={revealStyle}>
                     <DocumentFileLink className="unit-document-open" media={media} href={documentFileUrl(document.id, document.title, media.mimeType)}>
                       <DocumentFileIcon file={media} size={19} />
-                      <span><strong>{document.title}</strong><small>ดาวน์โหลด {document.downloadCount.toLocaleString("th-TH")} ครั้ง</small></span>
+                      <span><strong>{document.title}</strong><small className="public-document-card-meta"><span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span><span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span><DocumentNewBadge isNew={document.isNew}/></small></span>
                     </DocumentFileLink>
                     <a className="public-document-action public-document-download" href={documentFileUrl(document.id, document.title, media.mimeType, "download")} aria-label={`ดาวน์โหลด PDF ${document.title}`} title="ดาวน์โหลด PDF" onClick={() => recordDocumentAccess(document.id, "download")}><Download size={16}/><span>{media.size}</span></a>
                   </div>
@@ -458,7 +468,7 @@ function UnitDocumentsSection({
                   <DocumentFileIcon file={media} size={19} />
                   <span>
                     <strong>{document.title}</strong>
-                    <small>ดาวน์โหลด {document.downloadCount.toLocaleString("th-TH")} ครั้ง</small>
+                    <small className="public-document-card-meta"><span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span><span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span><DocumentNewBadge isNew={document.isNew}/></small>
                   </span>
                   {media ? <span className="public-document-action public-document-download unit-document-download-indicator" title="ดาวน์โหลดไฟล์"><Download size={16} aria-hidden="true"/><span>{media.size}</span></span> : <b className="public-document-action">{document.mediaIds.length} ไฟล์</b>}
                 </>

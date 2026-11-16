@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/server/auth/session";
 import { actOnPost, getPostById, PostInputError } from "@/server/posts/repository";
+import { collectMediaIds } from "@/features/media/media-references";
+import { listPublicMediaItemsByIds } from "@/server/media/repository";
+import { attachResolvedMedia } from "@/server/media/resolve-references";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
@@ -8,7 +11,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ไม่มีสิทธิ์ดูข่าว" }, { status: 401 });
   const post = await getPostById((await params).id);
   if (!post) return NextResponse.json({ error: "ไม่พบข่าว" }, { status: 404 });
-  return NextResponse.json(post, { headers: { "Cache-Control": "no-store" } });
+  const media = await listPublicMediaItemsByIds(collectMediaIds(post));
+  return NextResponse.json({ post: attachResolvedMedia(post, media), media }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

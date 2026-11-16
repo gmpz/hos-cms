@@ -70,7 +70,7 @@ export async function listUsers(): Promise<ManagedUser[]> {
 export async function getUserProfileOptions(): Promise<UserProfileOptions> {
   const [masters, units, media] = await Promise.all([
     prisma.profileMaster.findMany({ where: { active: true }, select: { id: true, kind: true, name: true }, orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
-    prisma.unit.findMany({ where: { id: { not: "hospital" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.unit.findMany({ where: { id: { not: "hospital" }, deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.mediaAsset.findMany({ where: { kind: "IMAGE" }, select: { id: true, name: true }, orderBy: { uploadedAt: "desc" } }),
   ]);
   return {
@@ -166,7 +166,7 @@ async function validateProfileReferences(tx: Prisma.TransactionClient, input: Us
     if (id && await tx.profileMaster.count({ where: { id, kind, active: true } }) !== 1) throw new Error("INVALID_PROFILE_REFERENCE");
   }
   if (input.profileMediaId && await tx.mediaAsset.count({ where: { id: input.profileMediaId, kind: "IMAGE" } }) !== 1) throw new Error("INVALID_PROFILE_REFERENCE");
-  if (await tx.unit.count({ where: { id: { in: input.unitIds } } }) !== input.unitIds.length) throw new Error("INVALID_PROFILE_REFERENCE");
+  if (await tx.unit.count({ where: { id: { in: input.unitIds }, deletedAt: null } }) !== input.unitIds.length) throw new Error("INVALID_PROFILE_REFERENCE");
   if (input.primaryUnitId && !input.unitIds.includes(input.primaryUnitId)) throw new Error("INVALID_PRIMARY_UNIT");
 }
 
@@ -204,6 +204,22 @@ export async function setUserStatus(id: string, status: "ACTIVE" | "DISABLED", a
     await tx.user.update({ where: { id }, data: { status } });
     if (status === "DISABLED") await tx.session.deleteMany({ where: { userId: id } });
     await audit(tx, actorId, status === "DISABLED" ? "user.disable" : "user.enable", id, `${status === "DISABLED" ? "ปิดใช้งาน" : "เปิดใช้งาน"}บัญชี ${target.username}${status === "DISABLED" ? " และเพิกถอน session" : ""}`);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function deleteUser(id: string, actorId: string) {
+  if (id === actorId) throw new Error("SELF_ACTION");
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.user.findUnique({ where: { id }, select: { username: true } });
+    if (!target) throw new Error("USER_NOT_FOUND");
+    await assertNotLastActiveAdmin(tx, id);
+    const units = await tx.unit.findMany({ select: { payload: true, publishedPayload: true, draftAccessGrants: true } });
+    if (units.some((unit) => [unit.payload, unit.publishedPayload, unit.draftAccessGrants].some((value) => JSON.stringify(value).includes(id))))
+      throw new Error("USER_LINKED_TO_UNIT");
+    await tx.pageAccessGrant.deleteMany({ where: { userId: id } });
+    await tx.unitAccessGrant.deleteMany({ where: { userId: id } });
+    await tx.user.delete({ where: { id } });
+    await audit(tx, actorId, "user.delete", id, `ลบบัญชี ${target.username}`);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

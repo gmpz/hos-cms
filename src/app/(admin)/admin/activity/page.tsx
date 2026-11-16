@@ -12,13 +12,11 @@ import { typeLabels } from "@/features/activity/components/activity-manager";
 import type { ActivityDateRange } from "@/features/activity/date-range";
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
-const pageSize = 10;
 
 export default function ActivityPage({ searchParams }: Props) {
   return <main className="settings-page activity-page">
     <SettingsHeading eyebrow="" title="บันทึกกิจกรรม" description="ดูว่าใครทำอะไรในระบบ และดำเนินการเมื่อไร"/>
     <Suspense fallback={<ActivityPendingCard/>}><ActivityContent searchParams={searchParams}/></Suspense>
-    <p className="activity-note">บันทึกนี้ใช้ตรวจสอบย้อนหลัง แก้ไขหรือลบจากหน้านี้ไม่ได้</p>
   </main>;
 }
 
@@ -34,22 +32,17 @@ async function ActivityContent({ searchParams }: Props) {
   const type = availableTypes.includes(requestedType) ? requestedType : "all";
   const requestedPage = Number(typeof params.page === "string" ? params.page : "1");
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-  const formatDay = (date: string) => new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" }).format(new Date(`${date}T00:00:00+07:00`));
+  const requestedSize = typeof params.size === "string" ? params.size : "10";
+  const pageSize = ["10", "20", "50"].includes(requestedSize) ? Number(requestedSize) : 10;
   return <section className="activity-card" aria-label="รายการบันทึกกิจกรรม">
     <div className="activity-card-toolbar">
-      <div><h2>รายการกิจกรรม</h2><p>{formatDay(range.start)}{range.start !== range.end ? ` – ${formatDay(range.end)}` : ""} (เวลาไทย)</p></div>
-      <ActivityFilters key={`${range.period}:${range.start}:${range.end}`} range={range} query={query} type={type} types={availableTypes} typeLabels={typeLabels}/>
+      <ActivityFilters key={`${range.period}:${range.start}:${range.end}`} range={range} query={query} type={type} types={availableTypes} typeLabels={typeLabels} pageSize={pageSize}/>
     </div>
-    <ActivityTableHeader/>
-    <Suspense fallback={<ActivityLoading />}><ActivityRows range={range} query={query} type={type} page={page}/></Suspense>
+    <Suspense fallback={<ActivityLoading />}><ActivityRows range={range} query={query} type={type} page={page} pageSize={pageSize}/></Suspense>
   </section>;
 }
 
-function ActivityTableHeader() {
-  return <div className="activity-list-header" role="row"><span>กิจกรรม</span><span>รายละเอียด</span><span>ผู้ดำเนินการ</span><span>วันและเวลา</span><span>จัดการ</span></div>;
-}
-
-async function ActivityRows({ range, query, type, page }: { range: ActivityDateRange; query: string; type: string; page: number }) {
+async function ActivityRows({ range, query, type, page, pageSize }: { range: ActivityDateRange; query: string; type: string; page: number; pageSize: number }) {
   const where: Prisma.AuditLogWhereInput = {
     occurredAt: activityDateBounds(range),
     ...(type !== "all" ? { entityType: type } : {}),
@@ -69,5 +62,5 @@ async function ActivityRows({ range, query, type, page }: { range: ActivityDateR
     orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
     select: { id: true, action: true, summary: true, entityType: true, occurredAt: true, actor: { select: { displayName: true } } },
   });
-  return <ActivityManager range={range} activities={rows.map((row) => ({ ...row, actorName: row.actor?.displayName ?? "บัญชีที่ถูกลบ" }))} query={query} type={type} page={safePage} pageCount={pageCount} total={total}/>;
+  return <ActivityManager range={range} activities={rows.map((row) => ({ ...row, actorName: row.actor?.displayName ?? "บัญชีที่ถูกลบ" }))} query={query} type={type} page={safePage} pageSize={pageSize} pageCount={pageCount} total={total}/>;
 }

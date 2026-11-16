@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/server/auth/session";
-import { DocumentInputError, listDeletedDocuments, listDocuments, saveDocument } from "@/server/documents/repository";
+import { DocumentInputError, listDeletedDocuments, listDocuments, saveDocument, withResolvedDocumentMedia } from "@/server/documents/repository";
 
 export async function GET(request: Request) {
   const admin = new URL(request.url).searchParams.get("admin") === "1";
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   if (user?.role !== "ADMIN" || user.mustChangePassword)
     return NextResponse.json({ error: "ไม่มีสิทธิ์จัดการเอกสาร" }, { status: 401 });
   try {
-    return NextResponse.json(await saveDocument(await request.json()));
+    return NextResponse.json(await withResolvedDocumentMedia(await saveDocument(await request.json())));
   } catch (error) {
     if (error instanceof DocumentInputError)
       return NextResponse.json({ error: error.message }, { status: error.status });

@@ -3,12 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Building2, CalendarDays, Eye, Link2, Mail, Newspaper } from "lucide-react";
 import Link from "next/link";
 import type { DemoPost } from "@/features/pages/demo/data";
-import { useMediaRevision } from "@/features/media/use-media-revision";
 import { BlockRenderer } from "@/features/pages/blocks/renderers/block-renderer";
 import { incrementPostViewCount } from "../demo/storage";
 import { PublicNewsCard } from "./public-news-card";
 export function PublicNewsArticle({ slug, initialPost, relatedPosts, categoryLabel }: { slug: string; initialPost: DemoPost | null; relatedPosts: DemoPost[]; categoryLabel: string }) {
-  useMediaRevision();
   const post = initialPost;
   const [viewCount, setViewCount] = useState(0);
   const [shareUrl, setShareUrl] = useState("");
@@ -56,7 +54,7 @@ export function PublicNewsArticle({ slug, initialPost, relatedPosts, categoryLab
           </div>
         </header>
         <div className="public-news-body">
-          <BlockRenderer blocks={post.blocks} pdfPositionOnly />
+          <BlockRenderer blocks={post.blocks} pdfPositionOnly loadingPresentation="level-two" />
           {shareUrl ? (
             <section className="public-news-share" aria-label="แชร์ข่าวนี้">
               <p>แชร์หน้านี้:</p>

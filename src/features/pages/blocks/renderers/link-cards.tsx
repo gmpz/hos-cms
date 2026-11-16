@@ -2,9 +2,9 @@
 
 import { FileText } from "lucide-react";
 import {
-  getDemoMediaItem,
   mediaPreviewStyle,
 } from "@/features/media/demo/media-registry";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import { useLinkTargetResolver } from "@/features/navigation/link-target-catalog-context";
 import type { BlockConfigMap } from "../config/types";
 import { SecondaryRichText } from "./secondary-rich-text";
@@ -26,7 +26,7 @@ export function LinkCards({ config }: { config: BlockConfigMap["linkCards"] }) {
           const external = item.target.kind === "external";
           const media =
             item.visual.kind === "image"
-              ? getDemoMediaItem(item.visual.mediaId)
+              ? displayMediaFor(item.visual)
               : null;
           return (
             <a

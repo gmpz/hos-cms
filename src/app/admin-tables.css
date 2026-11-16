@@ -1,0 +1,376 @@
+/* Shared presentation for administrator list tables. Feature classes own columns and content. */
+.admin-shell .admin-data-table {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  container: admin-data-table / inline-size;
+}
+
+.admin-shell .admin-data-table-scroll {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  border-radius: 13px 13px 0 0;
+}
+
+.admin-shell .admin-data-table-scroll:focus-visible,
+.admin-shell .admin-data-grid-scroll:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.admin-shell .admin-data-table.admin-data-table-scroll,
+.admin-shell .users-table-card .admin-data-table-scroll { border-radius: 14px; }
+.admin-shell .users-table-card .users-table-scroll { width: calc(100% - 40px); }
+
+.admin-shell .admin-data-table table {
+  width: 100%;
+  min-width: 980px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-shell .admin-data-table.documents-table table { min-width: 1120px; }
+.admin-shell .admin-data-table.documents-table :is(th, td):nth-child(1) { width: 21%; }
+.admin-shell .admin-data-table.documents-table :is(th, td):nth-child(5) { width: 14%; }
+.admin-shell .admin-data-table.documents-table td:nth-child(5) {
+  overflow: visible;
+  text-overflow: clip;
+}
+.admin-shell .admin-data-table.documents-table td:nth-child(5) :is(.status-pill, .news-deleted-status) {
+  max-width: none;
+  overflow: visible;
+  font-weight: 400;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+.admin-shell .admin-data-table.documents-table :is(th, td):nth-child(7) {
+  width: 17%;
+  padding-right: 20px;
+}
+.admin-shell .admin-data-table.users-table-card table { min-width: 1120px; }
+.admin-shell .admin-data-table.media-table-wrap :is(th, td):nth-child(1) { width: 34%; }
+.admin-shell .admin-data-table.media-table-wrap :is(th, td):nth-child(2),
+.admin-shell .admin-data-table.media-table-wrap :is(th, td):nth-child(3),
+.admin-shell .admin-data-table.media-table-wrap :is(th, td):nth-child(6) { width: 11%; }
+.admin-shell .admin-data-table.media-table-wrap :is(th, td):nth-child(4) { width: 16%; }
+.admin-shell .admin-data-table.media-table-wrap :is(th, td):nth-child(5) { width: 17%; }
+.admin-shell .admin-data-table.media-table-wrap .media-file-name { min-width: 0; }
+.admin-shell .admin-data-table.media-table-wrap .media-file-name > strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-shell :is(.splash-screens-manager, .modal-announcements-manager) .admin-data-table table { min-width: 980px; }
+
+.admin-shell .admin-data-table :is(th, td) {
+  display: table-cell;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.admin-shell .admin-data-table th {
+  height: 44px;
+  background: color-mix(in srgb, var(--primary) 9%, #fff);
+  color: var(--foreground);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.admin-shell .admin-data-table td {
+  height: 62px;
+  border-top: 1px solid var(--border);
+  color: var(--foreground);
+  font-weight: 400;
+  vertical-align: middle;
+}
+
+.admin-shell .admin-data-table tbody tr:hover { background: #fafcfd; }
+
+.admin-shell .admin-data-table .admin-table-primary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 11px;
+}
+
+.admin-shell .admin-data-table .admin-table-primary > span:not(.document-file-icon) {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 10px;
+  background: #e8f1ff;
+  color: #2868bd;
+}
+
+.admin-shell .units-table .unit-name > .unit-table-cover {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.admin-shell .units-table .unit-table-cover > .unit-cover-image-layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+}
+
+.admin-shell .admin-data-table .admin-table-primary > .document-file-icon.type-generic {
+  background: #edf2f5;
+  color: #5f7280;
+}
+
+.admin-shell .admin-data-table .admin-table-primary > div { min-width: 0; }
+.admin-shell .admin-data-table .admin-table-primary > div :is(strong, small) {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-shell .admin-data-table .admin-table-primary strong { font-weight: 400; }
+.admin-shell .admin-data-table .admin-table-primary > div small { color: var(--muted-foreground); }
+.admin-shell .admin-data-table .users-table-person > span { border-radius: 50%; }
+.admin-shell .users-table-person strong > em { margin-inline-start: 8px; }
+.admin-shell :is(.admin-data-table, .admin-data-grid) :is(
+  .status-pill,
+  .page-status,
+  .category-manager-status,
+  .users-status,
+  .news-deleted-status
+) { font-weight: 400 !important; }
+
+.admin-shell .activity-table .admin-table-primary > span.activity-type--user {
+  background: #e7f8ef;
+  color: #18815a;
+}
+.admin-shell .activity-table .admin-table-primary > span.activity-type--document {
+  background: #fff3dc;
+  color: #a9680e;
+}
+
+.admin-shell .admin-data-table th.admin-table-actions-heading { text-align: center; }
+.admin-shell .admin-data-table .admin-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.admin-shell .admin-data-table .admin-table-actions > :is(a, button) {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #536d7b;
+  text-decoration: none;
+}
+.admin-shell .admin-data-table .admin-table-actions > :is(a, button):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: #eef6f5;
+  color: var(--primary);
+}
+.admin-shell .admin-data-table .admin-table-actions > :is(a, button):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.admin-shell .admin-data-table .admin-table-actions > .danger { color: var(--destructive); }
+.admin-shell .admin-data-table .admin-table-actions > .success { color: #16734c; }
+.admin-shell .media-table-wrap .admin-table-actions > button { width: 40px; min-width: 40px; height: 40px; }
+
+/* Grid-backed management lists share the same header and row rhythm. */
+.admin-shell .admin-data-grid-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.admin-shell .admin-data-grid :is(.category-manager-table-head, .navigation-table-head) {
+  min-height: 44px;
+  background: color-mix(in srgb, var(--primary) 9%, #fff);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+}
+.admin-shell .admin-data-grid :is(.category-manager-table-row, .navigation-table-row):not(:is(.category-manager-table-head, .navigation-table-head)) {
+  min-height: 62px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 400;
+}
+.admin-shell .category-list-table .category-manager-list > .category-manager-row:last-child {
+  border-bottom: 0;
+}
+
+/* The count and controls use one footer across native and grid tables. */
+.admin-shell .admin-data-table-footer {
+  container: admin-table-pagination / inline-size;
+  display: block;
+  padding: 13px 14px;
+  border-top: 1px solid var(--border);
+  background: #fff;
+}
+.admin-shell .admin-data-table-footer .admin-table-footer-layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+.admin-shell .admin-data-table-footer > p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.admin-shell .admin-data-table-footer .admin-table-footer-info {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 10px 12px;
+  white-space: nowrap;
+}
+.admin-shell .admin-data-table-footer .admin-table-footer-info > p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.admin-shell .admin-page-size-select {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown {
+  width: 72px;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 8px !important;
+  border: 1px solid var(--input);
+  border-radius: 9px;
+  background-color: #fff;
+  background-position: right 7px center;
+  color: var(--foreground);
+}
+.admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown > .native-select-display {
+  justify-content: center;
+  transform: translateX(-9px);
+}
+@supports (appearance: base-select) {
+  .admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown::picker(select) {
+    width: 72px;
+  }
+  .admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown option {
+    position: relative;
+    padding-inline: 0;
+    text-align: center;
+  }
+  .admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown option::checkmark {
+    position: absolute;
+    left: 4px;
+    margin-inline-end: 0;
+  }
+}
+.admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown:focus-visible {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.admin-shell .admin-data-table-footer nav {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+  margin-left: auto;
+}
+.admin-shell .admin-data-table-footer nav :is(button, a, .admin-pagination-disabled) {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: var(--admin-button-icon-size, 40px);
+  height: var(--admin-button-icon-size, 40px);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+}
+.admin-shell .admin-data-table-footer nav :is(button, a).active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}
+.admin-shell .admin-data-table-footer nav :is(button, a):hover:not(:disabled):not(.active) {
+  border-color: var(--border);
+  background: var(--muted);
+}
+.admin-shell .admin-data-table-footer nav .admin-pagination-disabled {
+  cursor: not-allowed;
+  opacity: .35;
+}
+.admin-shell .admin-data-table-footer nav .admin-pagination-current { display: none; }
+
+@container admin-table-pagination (max-width: 440px) {
+  .admin-shell .admin-data-table-footer nav .admin-pagination-page { display: none; }
+  .admin-shell .admin-data-table-footer nav .admin-pagination-current {
+    display: inline;
+    color: var(--foreground);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
+
+@container admin-table-pagination (max-width: 640px) {
+  .admin-shell .admin-data-table-footer .admin-table-footer-layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .admin-shell .admin-data-table-footer nav {
+    align-self: center;
+    margin-left: 0;
+  }
+}
+
+/* Lists with a separately rendered footer keep the same attached table shape. */
+.admin-shell .media-manager .media-table-wrap:has(+ .media-pagination),
+.admin-shell :is(.splash-screens-manager, .modal-announcements-manager) .admin-data-table:has(+ .admin-data-table-footer) {
+  border-radius: 14px 14px 0 0;
+}
+.admin-shell .media-manager .media-table-wrap + .media-pagination,
+.admin-shell :is(.splash-screens-manager, .modal-announcements-manager) .admin-data-table + .admin-data-table-footer {
+  margin-top: 0;
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+}
+
+@media (max-width: 560px) {
+  .admin-shell .users-table-card .users-table-scroll { width: calc(100% - 24px); }
+}

@@ -1,5 +1,8 @@
 import { PublicNewsArticle } from "@/features/news/components/public-news-article";
 import { getPostCategoryName, getPublishedPostBySlug, getRelatedPosts } from "@/server/posts/repository";
+import { collectMediaIds } from "@/features/media/media-references";
+import { listPublicMediaItemsByIds } from "@/server/media/repository";
+import { attachResolvedMedia } from "@/server/media/resolve-references";
 export const instant = false;
 export default async function NewsPage({
   params,
@@ -13,5 +16,6 @@ export default async function NewsPage({
   const [relatedPosts, categoryLabel] = post
     ? await Promise.all([getRelatedPosts(post), getPostCategoryName(post.categoryId)])
     : [[], "ไม่ระบุหมวดหมู่"];
-  return <PublicNewsArticle slug={slug} initialPost={post} relatedPosts={relatedPosts} categoryLabel={categoryLabel} />;
+  const media = await listPublicMediaItemsByIds(collectMediaIds([post, relatedPosts]));
+  return <PublicNewsArticle slug={slug} initialPost={attachResolvedMedia(post, media)} relatedPosts={relatedPosts} categoryLabel={categoryLabel} />;
 }

@@ -12,6 +12,7 @@ type Props = {
   zoom?: number;
   onZoomChange?: (value: number) => void;
   actions?: ReactNode;
+  controlActions?: ReactNode;
   subject?: string;
   resetFocus?: PersonnelPhotoFocus;
 };
@@ -29,6 +30,7 @@ export function PersonnelPhotoFocusEditor({
   zoom = 100,
   onZoomChange,
   actions,
+  controlActions,
   subject = "รูป",
   resetFocus = { x: 50, y: 25 },
 }: Props) {
@@ -83,9 +85,7 @@ export function PersonnelPhotoFocusEditor({
         <strong>จัดตำแหน่ง{subject}</strong>
         <small>ลาก{subject}ในวงกลมเพื่อเลื่อนตำแหน่ง ผลลัพธ์ที่เห็นคือ{subject}ที่จะนำไปแสดง</small>
         {onZoomChange ? <label className="unit-photo-zoom"><span><ZoomOut size={17}/><b>ขนาด{subject} {zoom}%</b><ZoomIn size={17}/></span><input type="range" min="100" max="300" step="5" value={zoom} aria-label={`ปรับขนาด${subject}`} onChange={(event) => onZoomChange(Number(event.target.value))}/><i><small>พอดีกรอบ</small><small>ขยาย 3 เท่า</small></i></label> : null}
-        <button type="button" onClick={() => { onChange(resetFocus); onZoomChange?.(100); }}>
-          คืนค่าตำแหน่งเริ่มต้น
-        </button>
+        {controlActions ? <div className="unit-general-cover-actions unit-photo-control-actions">{controlActions}</div> : <button type="button" onClick={() => { onChange(resetFocus); onZoomChange?.(100); }}>คืนค่าตำแหน่งเริ่มต้น</button>}
       </div>
     </div>
   );

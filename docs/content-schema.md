@@ -36,6 +36,7 @@ department units live in `cms_units` and the browser's old demo-unit list is dis
 Posts support duplicate-to-draft, unpublish-to-draft, and soft deletion. Documents now live in
 `cms_documents`, with category and unit foreign keys, one media ID, and published-only public reads.
 Documents can be unpublished to a draft or soft-deleted into a recoverable trash. Restoring a document returns it as a draft; deleted documents never appear in public reads or the public file route.
+Modal announcements and Splash Screens use their existing `deleted_at` field for recoverable trash. Each admin list separates active items from trash, restores items as drafts, and permits permanent deletion only from trash. Public reads exclude deleted items; permanent deletion keeps media files in the library.
 Published document links record explicit open and download clicks separately in `cms_documents.open_count` and `download_count`; the administrator list displays both counters. PDF viewer re-requests do not add another open count. These are click counts, not unique visitors; actions inside a browser's built-in PDF viewer are outside the site's controls. Draft or trashed file previews are not counted.
 The admin document list uses database-side search, filters, and 10-item pagination; its trash list is fetched only when selected. Public document reads keep their separate published-only contract.
 The admin and public document index pages filter fiscal years from existing rows; the public index defaults to the latest year with published documents and uses database-side pagination. The default fiscal year on new documents follows Thailand's October 1 boundary in Asia/Bangkok.
@@ -54,6 +55,12 @@ and `draft_access_grants` separately from `published_payload`, `published_slug`,
 change its public page, URL, or access; publishing atomically replaces the live
 snapshot and grants. `has_unpublished_changes` marks a saved draft newer than the
 published snapshot. Unit landing access remains attached to the unit ID. The
+`deleted_at` field moves a unit to recoverable trash. Deleted units are excluded
+from public reads and active admin lists; restoration returns them as drafts at
+the end of the active order. Units still referenced by posts, documents, or
+access grants cannot be moved to trash until those references are resolved. The
+administrator may permanently delete a trashed unit after typing a confirmation
+code; the server repeats the reference checks and rejects active units. The
 unit editor summarizes saved draft changes by section against the current
 published snapshot, including access-level and grant changes. This summary is
 not an audit log or a history of every save. Unit vision may use a structured
@@ -181,10 +188,16 @@ TypeScript alone does not enforce input validation or referential integrity.
   snapshots migrate to the canonical banner-slider shape on read.
   The structured document-list block v4 adds the same heading sizes, defaulting
   to the previous 24px standard heading. Earlier snapshots migrate on read.
+  The FAQ block v2 adds an optional heading and plain-text description above its
+  questions. Version 1 snapshots migrate with both fields empty, preserving their
+  existing public display.
   The unified documents block v4 limits its category tabs to six; older snapshots
   retain their first six tabs during migration. Version 5 adds an owner filter to
   each document tab and combines it with the selected document category, matching
-  the owner-then-category query behavior of news tabs.
+  the owner-then-category query behavior of news tabs. Version 6 adds a per-tab
+  fiscal-year filter (all years or a specific year); older
+  tabs migrate to all years. The public block queries one page of published
+  documents at a time.
   Render Markdown safely; no arbitrary HTML, classes or scripts from content.
 - The Page Builder and post editor share block defaults, settings UI, and renderer;
   the post editor only controls which block types can be inserted.

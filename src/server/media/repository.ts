@@ -5,11 +5,12 @@ import type { UploadedMediaItem } from "@/features/media/upload-media-file";
 import { prisma } from "@/server/database/prisma";
 import { mediaPublicUrl } from "@/server/media/storage";
 
-export async function listPublicMediaItems(): Promise<UploadedMediaItem[]> {
-  const items = await prisma.mediaAsset.findMany({
-    orderBy: [{ uploadedAt: "desc" }, { id: "desc" }],
-  });
-  return items.map((item) => ({
+/** Resolve only assets referenced by the content being returned to a page. */
+export async function listPublicMediaItemsByIds(ids: Iterable<string>): Promise<UploadedMediaItem[]> {
+  const uniqueIds = [...new Set(ids)].filter(Boolean);
+  if (!uniqueIds.length) return [];
+  const rows = await prisma.mediaAsset.findMany({ where: { id: { in: uniqueIds } } });
+  return rows.map((item) => ({
     id: item.id,
     name: item.name,
     kind: item.kind === MediaKind.IMAGE ? "image" : "document",

@@ -5,28 +5,27 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MediaInteraction } from "../config/types";
 import {
-  getDemoMediaItem,
   mediaPreviewStyle,
 } from "@/features/media/demo/media-registry";
+import type { DemoMediaItem } from "@/features/media/demo/media-items";
 import { useLinkTargetResolver } from "@/features/navigation/link-target-catalog-context";
 
-export function MediaInteractionOverlay({ interaction, mediaId, label, disabled = false }: {
+export function MediaInteractionOverlay({ interaction, media, label, disabled = false }: {
   interaction: MediaInteraction;
-  mediaId: string | null;
+  media: DemoMediaItem | null;
   label: string;
   disabled?: boolean;
 }) {
   const resolveTarget = useLinkTargetResolver();
   const [open, setOpen] = useState(false);
   const [openedMedia, setOpenedMedia] = useState<{
-    mediaId: string;
+    media: DemoMediaItem;
     label: string;
   } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragStart = useRef<{ clientX: number; clientY: number; x: number; y: number } | null>(null);
-  const media = getDemoMediaItem(mediaId);
-  const lightboxMedia = getDemoMediaItem(openedMedia?.mediaId ?? null);
+  const lightboxMedia = openedMedia?.media ?? null;
   const changeZoom = (next: number) => {
     const clamped = Math.min(3, Math.max(1, next));
     setZoom(clamped);
@@ -44,7 +43,7 @@ export function MediaInteractionOverlay({ interaction, mediaId, label, disabled 
         onClick={() => {
           setZoom(1);
           setPan({ x: 0, y: 0 });
-          setOpenedMedia({ mediaId: media.id, label });
+          setOpenedMedia({ media, label });
           setOpen(true);
         }} aria-label={`เปิดดูภาพขนาดใหญ่: ${label}`} />
     ) : null}

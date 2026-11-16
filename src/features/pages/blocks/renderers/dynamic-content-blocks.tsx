@@ -8,15 +8,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  LoaderCircle,
 } from "lucide-react";
-import { publicDocumentsAreLoaded, readDocuments, refreshDocuments } from "@/features/documents/demo/storage";
-import type { DemoDocument } from "@/features/documents/demo/model";
+import { documentsChangeEvent, fetchPublicDocumentBlockPage, type PublicDocumentBlockPage } from "@/features/documents/demo/storage";
 import { documentFileUrl } from "@/features/documents/document-file-name";
+import { documentMedia } from "@/features/documents/document-media";
 import { recordDocumentAccess } from "@/features/documents/record-document-access";
-import { useMediaRevision } from "@/features/media/use-media-revision";
-import {
-  getDemoMediaItem,
-} from "@/features/media/demo/media-registry";
+import { DocumentNewBadge } from "@/features/documents/components/document-new-badge";
 import { isPdfFile } from "@/features/media/file-behavior";
 import { DocumentFileIcon } from "@/features/media/components/document-file-icon";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
@@ -28,15 +26,32 @@ import type { BlockConfigMap } from "../config/types";
 import { SecondaryRichText } from "./secondary-rich-text";
 import { DynamicBlockSkeleton } from "./dynamic-block-skeleton";
 
+function documentPaginationItems(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+
+  const start = Math.max(2, Math.min(currentPage - 2, totalPages - 5));
+  const visiblePages = [1, ...Array.from({ length: 5 }, (_, index) => start + index), totalPages];
+  const items: Array<number | "ellipsis"> = [];
+  for (const pageNumber of visiblePages) {
+    const previous = items[items.length - 1];
+    if (typeof previous === "number" && pageNumber - previous === 2) items.push(previous + 1);
+    else if (typeof previous === "number" && pageNumber - previous > 2) items.push("ellipsis");
+    items.push(pageNumber);
+  }
+  return items;
+}
+
 export function PostsContentBlock({
   config,
 }: {
   config: BlockConfigMap["posts"];
 }) {
-  useMediaRevision();
   const [posts, setPosts] = useState<DemoPost[]>(() => readPosts());
   const [loading, setLoading] = useState(() => !publicPostsAreLoaded());
-  const [page, setPage] = useState(1);
+  const filterKey = JSON.stringify([config.categoryId, config.limit, config.layout, config.source]);
+  const [pageState, setPageState] = useState({ filterKey, page: 1 });
+  const page = pageState.filterKey === filterKey ? pageState.page : 1;
+  const setPage = (nextPage: number) => setPageState({ filterKey, page: nextPage });
   useEffect(() => {
     let active = true;
     const refresh = () => {
@@ -53,10 +68,6 @@ export function PostsContentBlock({
       window.removeEventListener("hos-posts-change", refresh);
     };
   }, []);
-  useEffect(() => {
-    setPage(1);
-  }, [config.categoryId, config.limit, config.layout, config.source.kind, config.source.kind === "unit" ? config.source.unitId : null]);
-  if (loading) return <DynamicBlockSkeleton layout={config.layout === "grid" ? "cards" : "rows"} items={config.limit} label="กำลังโหลดข่าวภายในบล็อก" />;
   const filteredItems = posts.filter(
       (post) =>
         post.status === "published" &&
@@ -72,6 +83,7 @@ export function PostsContentBlock({
     (currentPage - 1) * config.limit,
     currentPage * config.limit,
   );
+  if (loading) return <DynamicBlockSkeleton layout={config.layout === "grid" ? "cards" : "rows"} items={config.limit} label="กำลังโหลดข่าวภายในบล็อก" />;
   const pagination = totalPages > 1 ? (
     <nav className="document-block-pagination posts-block-pagination" aria-label="หน้าข่าวและผลงาน">
       <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16}/></button>
@@ -102,8 +114,8 @@ export function PostsContentBlock({
           }
         >
           {items.map((post) => {
-            const cover = getDemoMediaItem(post.coverMediaId);
-            const coverStyle = cover
+            const coverUrl = post.coverImageUrl;
+            const coverStyle = coverUrl
               ? undefined
               : { backgroundImage: "url(/hospital-logo.png)" };
             return config.layout === "grid" ? (
@@ -111,13 +123,13 @@ export function PostsContentBlock({
             ) : (
               <Link href={`/news/${post.slug}`} key={post.id}>
                 <span
-                  className={`tabbed-news-cover news-cover-viewport ${cover ? "" : "fallback-logo"}`}
+                  className={`tabbed-news-cover news-cover-viewport ${coverUrl ? "" : "fallback-logo"}`}
                   style={
                     coverStyle
                   }
                   role="img"
                   aria-label={`ภาพประกอบ ${post.title}`}
-                >{cover ? <NewsCoverImage post={post} media={cover} /> : null}</span>
+                >{coverUrl ? <NewsCoverImage post={post} src={coverUrl} /> : null}</span>
                 <div>
                   <h3>{post.title}</h3>
                   {post.excerpt.trim() ? (
@@ -143,14 +155,24 @@ export function PostsContentBlock({
 
 export function DocumentsContentBlock({
   config,
+  initialPage,
 }: {
   config: BlockConfigMap["documents"];
+  initialPage?: PublicDocumentBlockPage;
 }) {
-  useMediaRevision();
-  const [documents, setDocuments] = useState<DemoDocument[]>(() => readDocuments());
-  const [loading, setLoading] = useState(() => !publicDocumentsAreLoaded());
+  const firstTab = config.tabs[0];
+  const initialContextKey = JSON.stringify([firstTab?.id, firstTab?.source, firstTab?.categoryId, firstTab?.fiscalYear, config.limit]);
+  const initialRequestKey = JSON.stringify([initialContextKey, 1, 0]);
+  const [result, setResult] = useState<PublicDocumentBlockPage | null>(initialPage ?? null);
+  const [resultTabId, setResultTabId] = useState(initialPage ? firstTab?.id ?? "" : "");
+  const [loadError, setLoadError] = useState("");
+  const [loadedKey, setLoadedKey] = useState(initialPage ? initialRequestKey : "");
+  const [refreshKey, setRefreshKey] = useState(0);
   const [activeId, setActiveId] = useState(config.tabs[0]?.id ?? "");
   const [page, setPage] = useState(1);
+  const activeTab = config.tabs.find((tab) => tab.id === activeId) ?? config.tabs[0];
+  const contextKey = JSON.stringify([activeTab?.id, activeTab?.source, activeTab?.categoryId, activeTab?.fiscalYear, config.limit]);
+  const requestKey = JSON.stringify([contextKey, page, refreshKey]);
   const tabsRef = useRef<HTMLDivElement>(null);
   const [tabScroll, setTabScroll] = useState({
     overflow: false,
@@ -170,21 +192,29 @@ export function DocumentsContentBlock({
     });
   }, []);
   useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      setDocuments(readDocuments());
-    };
-    void refreshDocuments().then((items) => {
-      if (active) setDocuments(items);
-    }).catch(() => undefined).finally(() => {
-      if (active) setLoading(false);
-    });
-    window.addEventListener("hos-documents-change", refresh);
-    return () => {
-      active = false;
-      window.removeEventListener("hos-documents-change", refresh);
-    };
+    const refresh = () => setRefreshKey((value) => value + 1);
+    window.addEventListener(documentsChangeEvent, refresh);
+    return () => window.removeEventListener(documentsChangeEvent, refresh);
   }, []);
+  useEffect(() => {
+    if (!activeTab || loadedKey === requestKey) return;
+    const controller = new AbortController();
+    void fetchPublicDocumentBlockPage({ page, limit: config.limit, tab: activeTab }, controller.signal)
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        setResult(next);
+        setResultTabId(activeTab.id);
+        setLoadError("");
+        setLoadedKey(JSON.stringify([contextKey, next.page, refreshKey]));
+        if (next.page !== page) setPage(next.page);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setLoadError(error instanceof Error ? error.message : "โหลดเอกสารไม่สำเร็จ");
+        setLoadedKey(requestKey);
+      });
+    return () => controller.abort();
+  }, [activeTab, config.limit, contextKey, loadedKey, page, refreshKey, requestKey]);
   useEffect(() => {
     const element = tabsRef.current;
     if (!element) return;
@@ -201,32 +231,27 @@ export function DocumentsContentBlock({
       behavior: "smooth",
     });
   };
-  if (loading) return <DynamicBlockSkeleton layout={config.layout === "cards" ? "cards" : "rows"} tabs={config.tabs.length} items={config.limit} label="กำลังโหลดเอกสารภายในบล็อก" />;
-  const activeTab =
-    config.tabs.find((tab) => tab.id === activeId) ?? config.tabs[0];
-  const filteredItems = documents.filter(
-      (document) =>
-        document.status === "published" &&
-        (!activeTab ||
-          activeTab.source.kind === "all" ||
-          (activeTab.source.kind === "hospital" && document.unitId === null) ||
-          (activeTab.source.kind === "unit" && document.unitId === activeTab.source.unitId) ||
-          (activeTab.source.kind === "selected" && activeTab.source.documentIds.includes(document.id))) &&
-        (!activeTab?.categoryId || document.categoryId === activeTab.categoryId),
-    );
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / config.limit));
-  const currentPage = Math.min(page, totalPages);
-  const items = filteredItems.slice(
-    (currentPage - 1) * config.limit,
-    currentPage * config.limit,
-  );
+  const isLoading = loadedKey !== requestKey;
+  if (!activeTab) return <div className="document-block-empty" role="alert"><p>ยังไม่มีแท็บเอกสารสำหรับบล็อกนี้</p></div>;
+  if (isLoading && !result) return <DynamicBlockSkeleton layout={config.layout === "cards" ? "cards" : "rows"} tabs={config.tabs.length} items={config.limit} label="กำลังโหลดเอกสารภายในบล็อก" />;
+  if (loadError && !result) return <div className="document-block-empty" role="alert"><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div>;
+  const displayedTabId = result && config.tabs.some((tab) => tab.id === resultTabId) ? resultTabId : activeTab?.id;
+  const pendingTabId = isLoading && displayedTabId !== activeTab?.id ? activeTab?.id : null;
+  const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / config.limit));
+  const currentPage = result?.page ?? page;
+  const items = result?.items ?? [];
+  const retryNotice = loadError && !isLoading ? <div className="document-block-empty" role="alert"><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div> : null;
   const pagination = totalPages > 1 ? (
-    <nav className="document-block-pagination" aria-label="หน้าเอกสาร">
-      <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16} /></button>
-      {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
-        <button type="button" className={pageNumber === currentPage ? "active" : ""} aria-current={pageNumber === currentPage ? "page" : undefined} onClick={() => setPage(pageNumber)} key={pageNumber}>{pageNumber}</button>
-      ))}
-      <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16} /></button>
+    <nav className="document-block-pagination document-block-pagination-with-status" aria-label="หน้าเอกสาร">
+      <button type="button" disabled={isLoading || currentPage === 1} onClick={() => setPage(currentPage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16} /></button>
+      {documentPaginationItems(totalPages, currentPage).map((item, index) => item === "ellipsis"
+        ? <span className="document-block-pagination-ellipsis" aria-hidden="true" key={`ellipsis-${index}`}>…</span>
+        : <button type="button" disabled={isLoading} className={`document-block-pagination-page${item === currentPage ? " active" : ""}${Math.abs(item - currentPage) > 1 ? " is-distant" : ""}`} aria-current={item === currentPage ? "page" : undefined} onClick={() => setPage(item)} key={item}>{item}</button>
+      )}
+      <button type="button" disabled={isLoading || currentPage === totalPages} onClick={() => setPage(currentPage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16} /></button>
+      <span className="document-block-pagination-status" role="status" aria-live="polite">
+        {isLoading ? <><LoaderCircle size={16} aria-hidden="true" /><span className="public-loading-sr-only">กำลังโหลดหน้าเอกสาร</span></> : null}
+      </span>
     </nav>
   ) : null;
   return (
@@ -242,15 +267,27 @@ export function DocumentsContentBlock({
       </header>
       {config.tabs.length > 1 ? (
         <div className={`document-tabs-shell${tabScroll.overflow ? " has-overflow" : ""}${tabScroll.left ? " can-scroll-left" : ""}${tabScroll.right ? " can-scroll-right" : ""}`}>
-          {tabScroll.left ? (
-            <button
-              type="button"
-              className="tabbed-news-tabs-arrow is-left"
-              aria-label="เลื่อนแท็บไปทางซ้าย"
-              onClick={() => scrollTabs(-1)}
-            >
-              <ChevronLeft size={18} aria-hidden />
-            </button>
+          {tabScroll.overflow ? (
+            <div className="block-tabs-controls" aria-label="เลื่อนแท็บเอกสาร">
+              <button
+                type="button"
+                className="tabbed-news-tabs-arrow is-left"
+                aria-label="เลื่อนแท็บไปทางซ้าย"
+                disabled={!tabScroll.left}
+                onClick={() => scrollTabs(-1)}
+              >
+                <ChevronLeft size={18} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="tabbed-news-tabs-arrow is-right"
+                aria-label="เลื่อนแท็บไปทางขวา"
+                disabled={!tabScroll.right}
+                onClick={() => scrollTabs(1)}
+              >
+                <ChevronRight size={18} aria-hidden />
+              </button>
+            </div>
           ) : null}
           <div
             ref={tabsRef}
@@ -263,8 +300,9 @@ export function DocumentsContentBlock({
               <button
                 type="button"
                 role="tab"
-                aria-selected={tab.id === activeTab?.id}
-                className={tab.id === activeTab?.id ? "active" : ""}
+                aria-selected={tab.id === displayedTabId}
+                aria-label={tab.id === pendingTabId ? `${tab.label} กำลังโหลด` : undefined}
+                className={tab.id === displayedTabId ? "active" : tab.id === pendingTabId ? "is-pending" : ""}
                 key={tab.id}
                 onClick={(event) => {
                   setActiveId(tab.id);
@@ -280,22 +318,13 @@ export function DocumentsContentBlock({
               </button>
             ))}
           </div>
-          {tabScroll.right ? (
-            <button
-              type="button"
-              className="tabbed-news-tabs-arrow is-right"
-              aria-label="เลื่อนแท็บไปทางขวา"
-              onClick={() => scrollTabs(1)}
-            >
-              <ChevronRight size={18} aria-hidden />
-            </button>
-          ) : null}
         </div>
       ) : null}
       {config.layout === "table" ? (
         items.length ? (
-          <div className="document-block-table-wrap" role="tabpanel">
-            <table className="document-block-table">
+          <div className="document-block-table-shell" role="tabpanel">
+            <div className="document-block-table-wrap">
+              <table className="document-block-table">
             <thead>
               <tr>
                 <th>เอกสาร</th>
@@ -306,11 +335,12 @@ export function DocumentsContentBlock({
             </thead>
             <tbody>
               {items.map((document) => {
-                const media = getDemoMediaItem(document.mediaIds[0] ?? null);
+                const media = documentMedia(document);
                 const title = (
                   <span className="document-block-table-title">
                     <DocumentFileIcon file={media} />
                     <strong>{document.title}</strong>
+                    <DocumentNewBadge isNew={document.isNew}/>
                   </span>
                 );
                 return (
@@ -345,19 +375,22 @@ export function DocumentsContentBlock({
                 );
               })}
             </tbody>
-            </table>
+              </table>
+            </div>
             {pagination}
+            {retryNotice}
           </div>
         ) : (
           <div className="document-block-empty" role="tabpanel">
             <p>ยังไม่มีเอกสารเผยแพร่ในแท็บนี้</p>
+            {retryNotice}
           </div>
         )
       ) : (
       <div className="unit-document-list document-block-list" role="tabpanel">
         {items.length ? (
           items.map((document) => {
-            const media = getDemoMediaItem(document.mediaIds[0] ?? null);
+            const media = documentMedia(document);
             if (media && isPdfFile(media)) {
               return (
                 <div className="unit-document-row-with-download" key={document.id}>
@@ -368,6 +401,7 @@ export function DocumentsContentBlock({
                       <small className="document-block-card-meta">
                         <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
                         <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
+                        <DocumentNewBadge isNew={document.isNew}/>
                       </small>
                     </span>
                   </DocumentFileLink>
@@ -383,6 +417,7 @@ export function DocumentsContentBlock({
                   <small className="document-block-card-meta">
                     <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
                     <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
+                    <DocumentNewBadge isNew={document.isNew}/>
                   </small>
                 </span>
                 {media ? <span className="public-document-action public-document-download unit-document-download-indicator" title="ดาวน์โหลดไฟล์"><Download size={16} aria-hidden="true"/><span>{media.size}</span></span> : <b className="public-document-action">{document.mediaIds.length} ไฟล์</b>}
@@ -407,6 +442,7 @@ export function DocumentsContentBlock({
           </div>
         )}
         {pagination}
+        {retryNotice}
       </div>
       )}
       <div className="tabbed-news-view-all tabbed-documents-view-all-bottom">

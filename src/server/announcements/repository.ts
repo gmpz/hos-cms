@@ -115,6 +115,12 @@ export async function listAnnouncements(): Promise<AnnouncementDto[]> {
   ));
 }
 
+export async function listDeletedAnnouncements(): Promise<AnnouncementDto[]> {
+  const rows = await prisma.announcement.findMany({ where: { deletedAt: { not: null }, displayMode: "MODAL" }, include,
+    orderBy: [{ deletedAt: "desc" }, { id: "asc" }] });
+  return Promise.all(rows.map(toDto));
+}
+
 export async function getAnnouncement(id: string): Promise<AnnouncementDto | null> {
   const row = await prisma.announcement.findFirst({ where: { id, deletedAt: null, displayMode: "MODAL" }, include });
   return row ? toDto(row) : null;

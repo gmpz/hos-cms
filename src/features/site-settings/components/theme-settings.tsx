@@ -15,10 +15,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MediaPicker } from "@/features/media/components/media-picker";
 import { PersonnelPhotoFocusEditor } from "@/features/units/components/personnel-photo-focus-editor";
 import {
-  getDemoMediaItem,
   mediaPreviewStyle,
 } from "@/features/media/demo/media-registry";
-import { useMediaRevision } from "@/features/media/use-media-revision";
+import { displayMediaFor } from "@/features/media/resolved-media";
 import { defaultTheme, type ThemeTokens } from "../types";
 import { logoPositionStyle } from "../logo-position";
 import {
@@ -94,14 +93,7 @@ const themePresets: Array<{
     name: "แบบที่ 4 · เขียวมิ้นต์",
     description:
       "นุ่มนวล ทันสมัย และเป็นมิตร อิงโทนเขียวอมฟ้าจากสื่อประชาสัมพันธ์",
-    theme: {
-      primary: "#176B5B",
-      secondary: "#45AFA3",
-      accent: "#E2A13B",
-      emergency: "#C83E3E",
-      background: "#FFFFFF",
-      text: "#2C332F",
-    },
+    theme: defaultTheme,
   },
 ];
 
@@ -112,7 +104,6 @@ function sameTheme(left: ThemeTokens, right: ThemeTokens) {
 }
 
 export function ThemeSettings() {
-  useMediaRevision();
   const [settings, setSettings] = useState(() => readSiteSettings());
   const [picker, setPicker] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -143,7 +134,7 @@ export function ThemeSettings() {
     };
   }, []);
   if (loading) return <AdminContentLoading />;
-  const logo = getDemoMediaItem(settings.logoMediaId);
+  const logo = displayMediaFor(settings, "logoMediaId");
   const logoStyle = logo
     ? { ...mediaPreviewStyle(logo), ...logoPositionStyle(settings) }
     : { backgroundImage: "url(/hospital-logo.png)" };

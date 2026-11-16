@@ -15,8 +15,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "ไม่มีสิทธิ์ดูเอกสาร" }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const pageText = params.get("page") ?? "1";
+  const sizeText = params.get("size") ?? "10";
   if (!/^[1-9]\d*$/.test(pageText) || !Number.isSafeInteger(Number(pageText)))
     return NextResponse.json({ error: "เลขหน้าไม่ถูกต้อง" }, { status: 400 });
+  if (!["10", "20", "50"].includes(sizeText))
+    return NextResponse.json({ error: "จำนวนรายการต่อหน้าไม่ถูกต้อง" }, { status: 400 });
   const statusText = params.get("status") ?? "all";
   if (statusText !== "all" && !statuses.has(statusText))
     return NextResponse.json({ error: "สถานะไม่ถูกต้อง" }, { status: 400 });
@@ -30,7 +33,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "ปีงบประมาณไม่ถูกต้อง" }, { status: 400 });
   const result = await listDocumentPage({
     page: Number(pageText),
-    pageSize: 10,
+    pageSize: Number(sizeText),
     search,
     categoryId: categoryId === "all" ? null : categoryId,
     status: statuses.get(statusText) ?? null,

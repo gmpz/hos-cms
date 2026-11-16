@@ -38,8 +38,7 @@ export function migrateDocumentBlocks<T>(blocks: T[]): T[] {
           : [],
       },
     } : version3;
-    if (version4.version !== 4 || !record(version4.config)) return version4 as T;
-    return {
+    const version5 = version4.version === 4 && record(version4.config) ? {
       ...version4,
       version: 5,
       config: {
@@ -58,6 +57,26 @@ export function migrateDocumentBlocks<T>(blocks: T[]): T[] {
               };
             })
           : [],
+      },
+    } : version4;
+    const version6 = version5.version === 5 && record(version5.config) ? {
+      ...version5,
+      version: 6,
+      config: {
+        ...version5.config,
+        tabs: Array.isArray(version5.config.tabs)
+          ? version5.config.tabs.map((tab) => record(tab) ? { ...tab, fiscalYear: "all" } : tab)
+          : [],
+      },
+    } : version5;
+    if (version6.version !== 6 || !record(version6.config) || !Array.isArray(version6.config.tabs)) return version6 as T;
+    return {
+      ...version6,
+      config: {
+        ...version6.config,
+        tabs: version6.config.tabs.map((tab) => record(tab) && tab.fiscalYear === "latest"
+          ? { ...tab, fiscalYear: "all" }
+          : tab),
       },
     } as T;
   });

@@ -5,6 +5,7 @@ import { UnitBootstrap } from "@/features/units/components/unit-bootstrap";
 import { GlobalToastHost } from "@/components/ui/global-toast";
 import "./globals.css";
 import "./cms.css";
+import "./admin-tables.css";
 
 const prompt = Prompt({
   variable: "--font-prompt",

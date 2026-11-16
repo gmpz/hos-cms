@@ -19,6 +19,7 @@ import { migrateContactInfoBlocks } from "@/features/pages/blocks/migrations/con
 import { migrateHeadingBlocks } from "@/features/pages/blocks/migrations/heading";
 import { migrateDividerBlocks } from "@/features/pages/blocks/migrations/divider";
 import { migrateTableBlocks } from "@/features/pages/blocks/migrations/table";
+import { migrateFaqBlocks } from "@/features/pages/blocks/migrations/faq";
 import type { DemoPageSummary } from "@/features/pages/demo/pages";
 import { isReservedPagePath } from "@/features/pages/reserved-paths";
 import type { AccessGrants } from "@/features/access/types";
@@ -57,7 +58,7 @@ export function toPageDocument(row: CmsPage, published = false): DemoPage | null
     title: row.name,
     header,
     blocks: Array.isArray(rawBlocks)
-      ? migrateTableBlocks(migrateDividerBlocks(migrateHeadingBlocks(migrateContactInfoBlocks(migrateLinkCardsBlocks(migrateStatisticsBlocks(migrateImageBlocks(migrateDocumentBlocks(
+      ? migrateFaqBlocks(migrateTableBlocks(migrateDividerBlocks(migrateHeadingBlocks(migrateContactInfoBlocks(migrateLinkCardsBlocks(migrateStatisticsBlocks(migrateImageBlocks(migrateDocumentBlocks(
           migrateNewsTabsBlocks(
             migrateServiceGroupBlocks(
               migrateBannerBlocks(
@@ -71,7 +72,7 @@ export function toPageDocument(row: CmsPage, published = false): DemoPage | null
               ),
             ),
           ),
-        ))))))))
+        )))))))))
       : rawBlocks,
   };
   return isDemoPage(document) ? document : null;
@@ -237,7 +238,7 @@ export async function actOnCmsPage(id: string, action: "duplicate" | "unpublish"
   return prisma.$transaction(async (tx) => {
     const row = await tx.cmsPage.findFirst({ where: { id, deletedAt: action === "restore" || action === "purge" ? { not: null } : null } });
     if (!row) throw new CmsPageError("ไม่พบหน้าเว็บไซต์", 404);
-    if (id === "home" && action !== "duplicate") throw new CmsPageError("หน้าแรกไม่สามารถลบหรือยกเลิกเผยแพร่ได้");
+    if (id === "home" && action !== "duplicate" && action !== "unpublish") throw new CmsPageError("หน้าแรกไม่สามารถลบได้");
     let result: CmsPage | null = null;
     if (action === "duplicate") {
       const copyId = randomUUID();

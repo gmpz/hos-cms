@@ -32,6 +32,6 @@ export const defaultTheme = {
   secondary: "#45AFA3",
   accent: "#E2A13B",
   emergency: "#C83E3E",
-  background: "#FFFDF7",
+  background: "#FFFFFF",
   text: "#2C332F",
 } satisfies ThemeTokens;

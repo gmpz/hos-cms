@@ -63,7 +63,7 @@ export async function searchSite(query: string, selectedKind: SearchKind | null,
     prisma.document.count({ where: documentWhere }),
     selectedKind && selectedKind !== "documents" ? Promise.resolve([]) : prisma.document.findMany({ where: documentWhere, orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }], skip: selectedKind === "documents" ? skip : 0, take, select: { id: true, title: true, description: true, mediaId: true, publishedAt: true, downloadCount: true } }),
     prisma.cmsPage.findMany({ where: { status: CmsPageStatus.PUBLISHED, accessLevel: PageAccessLevel.PUBLIC, deletedAt: null, publishedBlocks: { not: Prisma.DbNull } }, select: { id: true, path: true, name: true, publishedBlocks: true }, orderBy: { name: "asc" } }),
-    prisma.unit.findMany({ where: { id: { not: "hospital" }, status: UnitStatus.PUBLISHED, publishedAccessLevel: PageAccessLevel.PUBLIC, publishedSlug: { not: null }, publishedPayload: { not: Prisma.DbNull } }, select: { id: true, publishedSlug: true, publishedPayload: true }, orderBy: { name: "asc" } }),
+    prisma.unit.findMany({ where: { id: { not: "hospital" }, deletedAt: null, status: UnitStatus.PUBLISHED, publishedAccessLevel: PageAccessLevel.PUBLIC, publishedSlug: { not: null }, publishedPayload: { not: Prisma.DbNull } }, select: { id: true, publishedSlug: true, publishedPayload: true }, orderBy: { name: "asc" } }),
   ]);
 
   const mediaIds = [...new Set([...documents.flatMap((document) => document.mediaId ? [document.mediaId] : []), ...posts.flatMap((post) => post.publishedCoverMediaId ? [post.publishedCoverMediaId] : [])])];

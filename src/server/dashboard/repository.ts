@@ -12,7 +12,7 @@ export async function getAdminDashboardData() {
     prisma.post.groupBy({ by: ["status"], where: { deletedAt: null }, _count: { _all: true } }),
     prisma.document.groupBy({ by: ["status"], where: { deletedAt: null }, _count: { _all: true } }),
     prisma.mediaAsset.groupBy({ by: ["kind"], _count: { _all: true } }),
-    prisma.unit.count({ where: { id: { not: "hospital" } } }),
+    prisma.unit.count({ where: { id: { not: "hospital" }, deletedAt: null } }),
     prisma.auditLog.findMany({ take: 4, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], select: { id: true, action: true, summary: true, entityType: true, occurredAt: true, actor: { select: { displayName: true } } } }),
     prisma.siteSettings.findUnique({ where: { id: 1 }, select: { name: true, homepageId: true } }),
     todaySiteVisits(),
