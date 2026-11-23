@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword } from "./password";
 import { isValidPassword } from "@/features/auth/password-policy.mjs";
 
 export type ManagedUser = {
-  id: string; username: string; displayName: string; role: "ADMIN" | "MEMBER"; status: "ACTIVE" | "DISABLED"; lastLoginAt: Date | null; createdAt: Date;
+  id: string; username: string; displayName: string; role: "ADMIN" | "MEMBER"; status: "ACTIVE" | "DISABLED"; lockedUntil: Date | null; lastLoginAt: Date | null; createdAt: Date;
   personTypeId: string | null; positionId: string | null; levelId: string | null; profileMediaId: string | null;
   photoUrl: string | null; profilePhotoFocusX: number; profilePhotoFocusY: number; profilePhotoZoom: number;
   phone: string; phoneExtension: string; email: string; publishPhone: boolean; publishEmail: boolean;
@@ -26,13 +26,32 @@ export async function authenticate(username: string, password: string): Promise<
   const normalized = username.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { username: normalized } });
   if (!user || user.status !== "ACTIVE" || (user.lockedUntil && user.lockedUntil > new Date())) return null;
-  if (!(await verifyPassword(password, user.passwordHash))) {
-    const attempts = user.failedLoginAttempts + 1;
-    await prisma.user.update({ where: { id: user.id }, data: { failedLoginAttempts: attempts >= 5 ? 0 : attempts, lockedUntil: attempts >= 5 ? new Date(Date.now() + 15 * 60000) : null } });
-    return null;
-  }
-  await prisma.user.update({ where: { id: user.id }, data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() } });
-  return { id: user.id, mustChangePassword: user.mustChangePassword };
+  const passwordMatches = await verifyPassword(password, user.passwordHash);
+  return prisma.$transaction(async (tx) => {
+    // Serialize attempts for this account across all app processes. Password hashing
+    // happens before taking the lock so it does not hold a database connection busy.
+    await tx.$queryRaw`SELECT id FROM cms_users WHERE id = ${user.id} FOR UPDATE`;
+    const current = await tx.user.findUnique({ where: { id: user.id } });
+    const now = new Date();
+    if (!current || current.status !== "ACTIVE" || current.passwordHash !== user.passwordHash ||
+      (current.lockedUntil && current.lockedUntil > now)) return null;
+    if (!passwordMatches) {
+      const windowStart = current.failedLoginWindowStartedAt;
+      const inWindow = windowStart !== null && now.getTime() - windowStart.getTime() < 15 * 60000;
+      const attempts = inWindow ? current.failedLoginAttempts + 1 : 1;
+      const locked = attempts >= 5;
+      await tx.user.update({ where: { id: current.id }, data: {
+        failedLoginAttempts: locked ? 0 : attempts,
+        failedLoginWindowStartedAt: locked ? null : inWindow ? windowStart : now,
+        lockedUntil: locked ? new Date(now.getTime() + 15 * 60000) : null,
+      } });
+      return null;
+    }
+    await tx.user.update({ where: { id: current.id }, data: {
+      failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null, lastLoginAt: now,
+    } });
+    return { id: current.id, mustChangePassword: current.mustChangePassword };
+  });
 }
 
 export async function changeOwnPassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
@@ -44,7 +63,7 @@ export async function changeOwnPassword(userId: string, currentPassword: string,
   await prisma.$transaction(async (tx) => {
     const updated = await tx.user.updateMany({
       where: { id: userId, passwordHash: user.passwordHash, status: "ACTIVE" },
-      data: { passwordHash, mustChangePassword: false, failedLoginAttempts: 0, lockedUntil: null },
+      data: { passwordHash, mustChangePassword: false, failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null },
     });
     if (updated.count !== 1) throw new Error("PASSWORD_CHANGED");
     await tx.session.deleteMany({ where: { userId } });
@@ -55,7 +74,7 @@ export async function changeOwnPassword(userId: string, currentPassword: string,
 
 export async function listUsers(): Promise<ManagedUser[]> {
   const rows = await prisma.user.findMany({ select: {
-    id: true, username: true, displayName: true, role: true, status: true, lastLoginAt: true, createdAt: true,
+    id: true, username: true, displayName: true, role: true, status: true, lockedUntil: true, lastLoginAt: true, createdAt: true,
     personTypeId: true, positionId: true, levelId: true, profileMediaId: true, profilePhotoFocusX: true, profilePhotoFocusY: true, profilePhotoZoom: true, profileMedia: { select: { fileName: true } }, phone: true, phoneExtension: true, email: true, publishPhone: true, publishEmail: true,
     memberships: { select: { unitId: true, isPrimary: true } },
   }, orderBy: { createdAt: "desc" } });
@@ -238,8 +257,19 @@ export async function resetUserPassword(id: string, password: string, actorId: s
   return prisma.$transaction(async (tx) => {
     const target = await tx.user.findUnique({ where: { id }, select: { username: true } });
     if (!target) throw new Error("USER_NOT_FOUND");
-    await tx.user.update({ where: { id }, data: { passwordHash, mustChangePassword: true, failedLoginAttempts: 0, lockedUntil: null } });
+    await tx.user.update({ where: { id }, data: { passwordHash, mustChangePassword: true, failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null } });
     await tx.session.deleteMany({ where: { userId: id } });
     await audit(tx, actorId, "user.password.reset", id, `รีเซ็ตรหัสผ่านบัญชี ${target.username} และเพิกถอน session`);
+  });
+}
+
+export async function unlockUserLogin(id: string, actorId: string) {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.user.findUnique({ where: { id }, select: { username: true } });
+    if (!target) throw new Error("USER_NOT_FOUND");
+    await tx.user.update({ where: { id }, data: {
+      failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null,
+    } });
+    await audit(tx, actorId, "user.login.unlock", id, `ปลดล็อกการเข้าสู่ระบบบัญชี ${target.username}`);
   });
 }

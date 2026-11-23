@@ -302,3 +302,15 @@ Splash draft fields are separate from the JSON published snapshot. Saving an edi
 
 Modal drafts also use `published_snapshot`. Saving a published modal changes only draft fields and records `has_unpublished_changes`; public reads use the snapshot. Publishing copies the draft to the snapshot atomically, and discarding a saved draft restores the published values. The modal migration backfills existing published rows. Image announcements require a meaningful image text alternative and do not render stale text content.
 
+
+## Login failure window
+
+`cms_users.failed_login_window_started_at` starts a fixed 15-minute window at
+its first failed login. Five failures within that window lock new logins for
+15 minutes. Expired windows restart at one failure; successful login, password
+change/reset, and administrator unlock clear the counter and window. Attempts
+during a lock do not extend it. Login updates serialize on the user row to avoid
+losing concurrent failures. Administrator unlock is audited as `user.login.unlock`;
+it does not enable a disabled account, change passwords, or revoke sessions.
+The users table shows unexpired locks and exposes unlock through its existing
+confirmation dialog. Login responses continue using the generic error message.

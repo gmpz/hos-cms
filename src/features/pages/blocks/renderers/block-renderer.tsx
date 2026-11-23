@@ -469,7 +469,7 @@ function MapBlock({ config }: { config: BlockConfigMap["map"] }) {
   }, [url]);
   const current = mapResult?.sourceUrl === url ? mapResult : null;
   const loading = Boolean(url && !current);
-  return <div className="map-block"><BlockHeading title={config.title} description={config.description}/>{current?.embedUrl ? <PublicEmbed className={`height-${config.height}`} src={current.embedUrl} externalUrl={current.externalUrl} title={config.title || "แผนที่"} loading="lazy" referrerPolicy="no-referrer-when-downgrade"/> : <div className={`map-block-placeholder height-${config.height}${loading ? " public-loading-shape" : ""}`}><MapPin size={30}/><span>{loading ? "กำลังโหลดแผนที่..." : url ? "ไม่สามารถแสดงแผนที่จากลิงก์นี้ได้" : "เพิ่มลิงก์แชร์ Google Maps ในการตั้งค่าบล็อก"}</span></div>}{url ? <a href={current?.externalUrl ?? url} target="_blank" rel="noreferrer">เปิดใน Google Maps <ExternalLink size={15}/></a> : null}</div>;
+  return <div className="map-block"><BlockHeading title={config.title} description={config.description}/>{current?.embedUrl ? <PublicEmbed className={`height-${config.height}`} src={current.embedUrl} externalUrl={current.externalUrl} title={config.title || "แผนที่"} loading="lazy" referrerPolicy="no-referrer-when-downgrade"/> : <div className={`map-block-placeholder height-${config.height}${loading ? " public-loading-shape" : ""}`}><MapPin size={30}/><span>{loading ? "กำลังโหลดแผนที่..." : url ? "ไม่สามารถแสดงแผนที่จากลิงก์นี้ได้" : "เพิ่มลิงก์แชร์ Google Maps ในการตั้งค่าบล็อก"}</span></div>}{current?.embedUrl ? <a href={current.externalUrl} target="_blank" rel="noreferrer">เปิดใน Google Maps <ExternalLink size={15}/></a> : null}</div>;
 }
 
 function TimelineBlock({ config }: { config: BlockConfigMap["timeline"] }) {

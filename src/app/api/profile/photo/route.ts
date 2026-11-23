@@ -1,3 +1,4 @@
+import { InvalidUploadError, validatedUploadBytes } from "@/server/media/validate-upload";
 import { randomUUID } from "node:crypto";
 import { MediaKind } from "@prisma/client";
 import { currentUser } from "@/server/auth/session";
@@ -20,10 +21,11 @@ export async function POST(request: Request) {
     if (!extension) return Response.json({ message: "รองรับเฉพาะไฟล์ JPG, PNG และ WebP" }, { status: 415 });
 
     const assetId = `profile:${user.id}`;
+    const bytes = await validatedUploadBytes(file);
     const fileName = `${randomUUID()}.${extension}`;
     const previous = await prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { fileName: true } });
     savedPath = fileName;
-    await writeMediaFile(fileName, new Uint8Array(await file.arrayBuffer()));
+    await writeMediaFile(fileName, bytes);
     await prisma.$transaction(async (tx) => {
       await tx.mediaAsset.upsert({
         where: { id: assetId },
@@ -35,8 +37,9 @@ export async function POST(request: Request) {
     });
     if (previous?.fileName && previous.fileName !== fileName) await deleteMediaFile(previous.fileName).catch(() => undefined);
     return Response.json({ id: assetId, url: mediaPublicUrl(fileName) });
-  } catch {
+  } catch (error) {
     if (savedPath) await deleteMediaFile(savedPath).catch(() => undefined);
+    if (error instanceof InvalidUploadError) return Response.json({ message: error.message }, { status: 415 });
     return Response.json({ message: "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ" }, { status: 500 });
   }
 }

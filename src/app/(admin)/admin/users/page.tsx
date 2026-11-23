@@ -24,5 +24,7 @@ function UsersTableLoading() {
 async function UsersContent() {
   await connection();
   const [users, user, profileOptions] = await Promise.all([listUsers(), currentUser(), getUserProfileOptions()]);
-  return <UsersManager users={users} currentUserId={user?.id ?? ""} profileOptions={profileOptions}/>;
+  // This dynamic Server Component supplies one request-time clock for hydration.
+  // eslint-disable-next-line react-hooks/purity
+  return <UsersManager users={users} currentUserId={user?.id ?? ""} profileOptions={profileOptions} serverNow={Date.now()}/>;
 }

@@ -9,11 +9,40 @@ const allowedHosts = new Set([
 function parseAllowedUrl(value: string) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || !allowedHosts.has(url.hostname)) return null;
+    if (url.protocol !== "https:" || !allowedHosts.has(url.hostname) ||
+      url.username || url.password || (url.port && url.port !== "443")) return null;
     return url;
   } catch {
     return null;
   }
+}
+
+async function resolveShortUrl(sourceUrl: URL): Promise<URL> {
+  const signal = AbortSignal.timeout(6000);
+  const visited = new Set<string>();
+  let current = sourceUrl;
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    if (visited.has(current.href)) throw new Error("Redirect loop");
+    visited.add(current.href);
+    const response = await fetch(current, {
+      method: "GET",
+      redirect: "manual",
+      signal,
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    // Only headers are needed; do not download the destination page.
+    await response.body?.cancel();
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      if (!response.ok) throw new Error("Maps request failed");
+      return current;
+    }
+    const location = response.headers.get("location");
+    if (!location || redirects === 5) throw new Error("Invalid redirect");
+    const next = parseAllowedUrl(new URL(location, current).href);
+    if (!next) throw new Error("Disallowed redirect destination");
+    current = next;
+  }
+  throw new Error("Too many redirects");
 }
 
 function createEmbedUrl(url: URL) {
@@ -38,20 +67,15 @@ export async function GET(request: Request) {
   let resolvedUrl = sourceUrl;
   if (sourceUrl.hostname === "maps.app.goo.gl" || sourceUrl.hostname === "goo.gl") {
     try {
-      const response = await fetch(sourceUrl, {
-        method: "GET",
-        redirect: "follow",
-        signal: AbortSignal.timeout(6000),
-        headers: { "User-Agent": "Mozilla/5.0" },
-      });
-      const candidate = parseAllowedUrl(response.url);
-      if (candidate) resolvedUrl = candidate;
+      resolvedUrl = await resolveShortUrl(sourceUrl);
     } catch {
       return Response.json({ message: "ไม่สามารถเปิดลิงก์ Google Maps นี้ได้" }, { status: 422 });
     }
   }
 
-  const embedUrl = createEmbedUrl(resolvedUrl);
+  let embedUrl: string | null;
+  try { embedUrl = createEmbedUrl(resolvedUrl); }
+  catch { embedUrl = null; }
   if (!embedUrl)
     return Response.json({ message: "ไม่พบตำแหน่งจากลิงก์ Google Maps" }, { status: 422 });
   return Response.json(

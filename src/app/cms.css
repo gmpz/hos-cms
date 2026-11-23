@@ -8656,3 +8656,6 @@ select:not([multiple]),
 .tiptap-loading-body .admin-loading-shape:nth-child(3){width:94%}
 .tiptap-loading-body .admin-loading-shape:nth-child(4){width:65%}
 @media(prefers-reduced-motion:reduce){.tiptap-loading-toolbar>span{animation:none}}
+
+.users-account-status{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.users-account-status>small{color:var(--muted-foreground);font-size:12px;line-height:1.4;white-space:nowrap}

@@ -1,12 +1,14 @@
 "use server";
 
+import { InvalidUploadError, validatedUploadBytes } from "@/server/media/validate-upload";
+
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { currentUser } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { deleteMediaFile, writeMediaFile } from "@/server/media/storage";
-import { createProfileMaster, createUser, deleteProfileMaster, deleteUser, moveProfileMaster, resetUserPassword, revokeUserSessions, setUserStatus, updateProfileMaster, updateUser } from "@/server/auth/users";
+import { createProfileMaster, createUser, deleteProfileMaster, deleteUser, moveProfileMaster, resetUserPassword, unlockUserLogin, revokeUserSessions, setUserStatus, updateProfileMaster, updateUser } from "@/server/auth/users";
 import { isValidPhone, isValidPhoneExtension, phoneDigits } from "./phone";
 import { isValidPassword } from "@/features/auth/password-policy.mjs";
 
@@ -20,6 +22,7 @@ async function requireAdmin() {
   return user;
 }
 function messageFor(error: unknown): string {
+  if (error instanceof InvalidUploadError) return error.message;
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "ชื่อผู้ใช้นี้มีอยู่แล้ว";
   if (error instanceof Error && error.message === "LAST_ACTIVE_ADMIN") return "ไม่สามารถปิดบัญชีหรือลดสิทธิ์ผู้ดูแลระบบคนสุดท้ายได้";
   if (error instanceof Error && error.message === "USER_NOT_FOUND") return "ไม่พบบัญชีผู้ใช้นี้";
@@ -137,7 +140,7 @@ export async function updateUserAction(formData: FormData): Promise<UserActionRe
     if (id === actor.id && role !== "ADMIN") throw new Error("SELF_ACTION");
     const currentAsset = await prisma.mediaAsset.findUnique({ where: { id: `profile:${id}` }, select: { fileName: true } });
     const newFileName = photoAction === "replace" && photoFile instanceof File ? `${randomUUID()}.${profilePhotoExtensions[photoFile.type]}` : undefined;
-    if (newFileName && photoFile instanceof File) { newFilePath = newFileName; await writeMediaFile(newFileName, new Uint8Array(await photoFile.arrayBuffer())); }
+    if (newFileName && photoFile instanceof File) { const bytes = await validatedUploadBytes(photoFile); newFilePath = newFileName; await writeMediaFile(newFileName, bytes); }
     await updateUser(id, {
       displayName, role, phone, phoneExtension, email, unitIds, primaryUnitId,
       personTypeId: nullable("personTypeId"), positionId: nullable("positionId"), levelId: nullable("levelId"), profileMediaId: nullable("profileMediaId"),
@@ -192,5 +195,16 @@ export async function revokeSessionsAction(formData: FormData): Promise<UserActi
     await revokeUserSessions(id, actor.id);
     revalidatePath("/admin/users");
     return { ok: true, message: "บังคับออกจากระบบทุกอุปกรณ์แล้ว" };
+  } catch (error) { return { ok: false, message: messageFor(error) }; }
+}
+
+export async function unlockLoginAction(formData: FormData): Promise<UserActionResult> {
+  try {
+    const actor = await requireAdmin();
+    const id = String(formData.get("id") ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, message: "รหัสบัญชีผู้ใช้ไม่ถูกต้อง" };
+    await unlockUserLogin(id, actor.id);
+    revalidatePath("/admin/users");
+    return { ok: true, message: "ปลดล็อกการเข้าสู่ระบบแล้ว" };
   } catch (error) { return { ok: false, message: messageFor(error) }; }
 }

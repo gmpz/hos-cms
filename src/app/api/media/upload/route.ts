@@ -1,3 +1,4 @@
+import { InvalidUploadError, validatedUploadBytes } from "@/server/media/validate-upload";
 import { randomUUID } from "node:crypto";
 import { MediaKind, type Prisma } from "@prisma/client";
 import { currentUser } from "@/server/auth/session";
@@ -39,6 +40,7 @@ function mediaDto(item: { id: string; name: string; kind: MediaKind; mimeType: s
 }
 
 export async function GET(request: Request) {
+  if (!await canManageMedia()) return Response.json({ message: "ไม่มีสิทธิ์ดูคลังสื่อ" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   const params = new URL(request.url).searchParams;
   const ids = params.get("ids");
   if (ids !== null) {
@@ -108,12 +110,13 @@ export async function POST(request: Request) {
     if (file.size > maxFileSize) return Response.json({ message: "ไฟล์ต้องมีขนาดไม่เกิน 25 MB" }, { status: 413 });
     const extension = extensionByMimeType[file.type];
     if (!extension) return Response.json({ message: "ไม่รองรับประเภทไฟล์นี้" }, { status: 415 });
+    const bytes = await validatedUploadBytes(file);
     const fileName = `${randomUUID()}.${extension}`;
     const requestedId = formData.get("mediaId");
     const id = typeof requestedId === "string" && /^[\w:-]{1,191}$/.test(requestedId) ? requestedId : `upload:${fileName}`;
     if (await prisma.mediaAsset.findUnique({ where: { id }, select: { id: true } })) return Response.json({ message: "รหัสสื่อซ้ำ" }, { status: 409 });
     savedPath = fileName;
-    await writeMediaFile(fileName, new Uint8Array(await file.arrayBuffer()));
+    await writeMediaFile(fileName, bytes);
     await prisma.mediaAsset.create({ data: {
       id,
       name: file.name.slice(0, 255),
@@ -124,8 +127,9 @@ export async function POST(request: Request) {
       fileName,
     } });
     return Response.json({ id, url: mediaPublicUrl(fileName) }, { status: 201 });
-  } catch {
+  } catch (error) {
     if (savedPath) await deleteMediaFile(savedPath).catch(() => undefined);
+    if (error instanceof InvalidUploadError) return Response.json({ message: error.message }, { status: 415 });
     return Response.json({ message: "อัปโหลดไฟล์ไม่สำเร็จ" }, { status: 500 });
   }
 }

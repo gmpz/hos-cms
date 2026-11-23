@@ -1,5 +1,7 @@
 "use server";
 
+import { InvalidUploadError, validatedUploadBytes } from "@/server/media/validate-upload";
+
 import { randomUUID } from "node:crypto";
 import { MediaKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -41,9 +43,14 @@ export async function updateOwnProfileAction(formData: FormData) {
   let newFileName: string | null = null;
   let newFilePath: string | null = null;
   if (replacingPhoto && profilePhoto instanceof File) {
+    let bytes: Uint8Array;
+    try { bytes = await validatedUploadBytes(profilePhoto); } catch (error) {
+      if (error instanceof InvalidUploadError) redirect("/profile?error=photo");
+      throw error;
+    }
     newFileName = `${randomUUID()}.${photoExtensions[profilePhoto.type]}`;
     newFilePath = newFileName;
-    await writeMediaFile(newFileName, new Uint8Array(await profilePhoto.arrayBuffer()));
+    await writeMediaFile(newFileName, bytes);
   }
   try {
     await prisma.$transaction(async (tx) => {
