@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { defaultSiteSettings, readSiteSettings, refreshSiteSettings, siteSettingsChangedEvent } from "@/features/site-settings/demo/storage";
 import type { SiteSettings } from "@/features/site-settings/types";
+import { AdminSessionGuard } from "@/features/auth/components/admin-session-guard";
 import { AdminSidebar } from "./admin-sidebar";
 import { AdminTopbar } from "./admin-topbar";
 import { useSidebarCollapse } from "./use-sidebar-collapse";
@@ -29,11 +30,11 @@ export function AdminShell({ children, displayName, photoUrl, photoFocusX, photo
     return () => window.removeEventListener(siteSettingsChangedEvent, refresh);
   }, []);
   const style = { "--primary": settings.theme.primary, "--secondary": settings.theme.secondary, "--accent": settings.theme.accent, "--ink": settings.theme.text } as CSSProperties;
-  return <div className={`admin-shell${collapsed ? " sidebar-collapsed" : ""}`} style={style}>
+  return <AdminSessionGuard><div className={`admin-shell${collapsed ? " sidebar-collapsed" : ""}`} style={style}>
     <AdminSidebar open={open} collapsed={collapsed} onClose={() => setOpen(false)}/>
     <div className="admin-workspace">
       <AdminTopbar collapsed={collapsed} onMenu={() => setOpen(true)} onToggle={toggleCollapsed} displayName={displayName} photoUrl={photoUrl} photoFocusX={photoFocusX} photoFocusY={photoFocusY} photoZoom={photoZoom}/>
       <main className="admin-content">{children}</main>
     </div>
-  </div>;
+  </div></AdminSessionGuard>;
 }

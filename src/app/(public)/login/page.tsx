@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const returnTo = safeReturnTo(query.returnTo);
   const user = await currentUser();
   if (user) redirect(user.mustChangePassword ? changePasswordPath(returnTo) : returnTo);
-  const message = query.error === "invalid" ? "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือบัญชีถูกระงับชั่วคราว" : query.error === "unavailable" ? "ยังเชื่อมต่อระบบสมาชิกไม่ได้ กรุณาติดต่อผู้ดูแลระบบ" : null;
+  const message = query.error === "session-expired" ? "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง" : query.error === "invalid" ? "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือบัญชีถูกระงับชั่วคราว" : query.error === "unavailable" ? "ยังเชื่อมต่อระบบสมาชิกไม่ได้ กรุณาติดต่อผู้ดูแลระบบ" : null;
   return <BrandedAuthShell eyebrow="ระบบสำหรับบุคลากร" title="เข้าสู่ระบบ" description="ใช้บัญชีที่ผู้ดูแลระบบโรงพยาบาลสร้างให้">
       {message ? <div className="login-error" role="alert">{message}</div> : null}
       <form action={loginAction}>
