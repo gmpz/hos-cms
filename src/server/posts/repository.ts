@@ -222,7 +222,7 @@ const postListSelect = {
   unitId: true, owner: true, status: true, publishedAt: true,
   updatedAt: true, deletedAt: true, coverMediaId: true,
   coverFit: true, coverFocusX: true, coverFocusY: true, coverZoom: true,
-  showCoverInContent: true, revision: true, viewCount: true,
+  showCoverInContent: true, editorMode: true, revision: true, viewCount: true,
   publishedTitle: true, publishedExcerpt: true, publishedCategoryId: true,
   publishedUnitId: true, publishedOwner: true, publishedCoverMediaId: true,
   publishedCoverFit: true, publishedCoverFocusX: true, publishedCoverFocusY: true, publishedCoverZoom: true,
@@ -259,7 +259,7 @@ function toPostListDto(post: PostListRow, publicView = false): DemoPost {
     coverFit: (publicView ? post.publishedCoverFit : post.coverFit) as DemoPost["coverFit"],
     coverFocus: publicView ? { x: post.publishedCoverFocusX, y: post.publishedCoverFocusY } : { x: post.coverFocusX, y: post.coverFocusY },
     coverZoom: publicView ? post.publishedCoverZoom : post.coverZoom,
-    showCoverInContent: publicView ? false : post.showCoverInContent, blocks: [], revision: post.revision,
+    showCoverInContent: publicView ? false : post.showCoverInContent, blocks: [], editorMode: post.editorMode === "form" ? "form" : "blocks", revision: post.revision,
     hasUnpublishedChanges: publicView ? false : post.hasUnpublishedChanges,
     viewCount: post.viewCount,
   };

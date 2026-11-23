@@ -1,7 +1,7 @@
 "use client";
 
 import { createId } from "@/utils/create-id";
-import { AlertCircle, Copy, Eye, EyeOff, FileText, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { AlertCircle, Copy, Eye, EyeOff, FilePenLine, LayoutTemplate, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import Link from "next/link";
@@ -256,8 +256,8 @@ export function NewsManager() {
               <tr key={post.id}>
                 <td>
                   <div className="news-title-cell admin-table-primary">
-                    <span>
-                      <FileText size={18} />
+                    <span title={post.editorMode === "form" ? "ข่าวแบบฟอร์ม" : "ข่าวแบบบล็อก"} aria-label={post.editorMode === "form" ? "ข่าวแบบฟอร์ม" : "ข่าวแบบบล็อก"}>
+                      {post.editorMode === "form" ? <LayoutTemplate size={18} /> : <FilePenLine size={18} />}
                     </span>
                     <div>
                       <strong>{post.title}</strong>

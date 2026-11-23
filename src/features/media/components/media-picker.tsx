@@ -155,7 +155,7 @@ function OpenMediaPicker({
   const [loadedRequestKey, setLoadedRequestKey] = useState("");
   const [requestError, setRequestError] = useState<{ key: string; message: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [view, setView] = useState<"grid" | "list">("list");
+  const [view, setView] = useState<"grid" | "list">("grid");
   const [selectedId, setSelectedId] = useState<string | null>(currentId);
   const [selectedItem, setSelectedItem] = useState<DemoMediaItem | null>(() => getDemoMediaItem(currentId));
   const [draggingUpload, setDraggingUpload] = useState(false);
