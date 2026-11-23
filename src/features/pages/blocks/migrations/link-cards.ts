@@ -25,7 +25,7 @@ export function migrateLinkCardsBlocks<T>(blocks: T[]): T[] {
           title: "",
           description: "",
           presentation: "list",
-          columns: 3,
+          columns: 4,
           items: items.map((item, index) => isRecord(item) ? {
             id: `legacy-link-${String(block.id)}-${index}`,
             title: typeof item.label === "string" ? item.label : "ลิงก์",

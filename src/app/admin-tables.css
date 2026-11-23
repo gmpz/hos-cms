@@ -74,6 +74,13 @@
   white-space: nowrap;
 }
 .admin-shell :is(.splash-screens-manager, .modal-announcements-manager) .admin-data-table table { min-width: 980px; }
+.admin-shell .modal-announcements-manager .admin-data-table table { min-width: 1120px; }
+.admin-shell .modal-announcements-manager .admin-data-table :is(th, td):nth-child(1) { width: 32%; }
+.admin-shell .modal-announcements-manager .admin-data-table :is(th, td):nth-child(2) { width: 14%; }
+.admin-shell .modal-announcements-manager .admin-data-table :is(th, td):nth-child(3) { width: 8%; }
+.admin-shell .modal-announcements-manager .admin-data-table :is(th, td):nth-child(4) { width: 15%; }
+.admin-shell .modal-announcements-manager .admin-data-table :is(th, td):nth-child(5) { width: 15%; overflow: visible; white-space: normal; }
+.admin-shell .modal-announcements-manager .admin-data-table :is(th, td):nth-child(6) { width: 16%; overflow: visible; text-align: center; }
 
 .admin-shell .admin-data-table :is(th, td) {
   display: table-cell;

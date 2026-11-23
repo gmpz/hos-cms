@@ -23,6 +23,7 @@ import { showGlobalToast } from "@/components/ui/global-toast";
 import { NativeSelect } from "@/components/ui/native-select";
 import Link from "next/link";
 import { createPortal } from "react-dom";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -86,7 +87,12 @@ function DocumentActionsMenu({
       if (menuRef.current?.contains(event.target as Node) || triggerRef.current?.contains(event.target as Node)) return;
       setPosition(null);
     };
-    const closeOnScroll = () => setPosition(null);
+    const closeOnResize = () => setPosition(null);
+    const stopDismissal = listenForDropdownDismissal(
+      () => menuRef.current,
+      (target) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || menuRef.current?.contains(target)),
+      () => setPosition(null),
+    );
     const closeOnKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setPosition(null);
@@ -94,13 +100,13 @@ function DocumentActionsMenu({
     };
     window.document.addEventListener("pointerdown", closeOnPointer);
     window.document.addEventListener("keydown", closeOnKey);
-    window.addEventListener("scroll", closeOnScroll, true);
-    window.addEventListener("resize", closeOnScroll);
+
+    window.addEventListener("resize", closeOnResize);
     return () => {
       window.document.removeEventListener("pointerdown", closeOnPointer);
       window.document.removeEventListener("keydown", closeOnKey);
-      window.removeEventListener("scroll", closeOnScroll, true);
-      window.removeEventListener("resize", closeOnScroll);
+      stopDismissal();
+      window.removeEventListener("resize", closeOnResize);
     };
   }, [position]);
 
@@ -383,7 +389,7 @@ export function DocumentsManager() {
             </tr>
           </thead>
           <tbody>
-            {loading ? <AdminTableLoadingRows columns={7} /> : loadError ? <tr><td colSpan={7}><div className="document-table-loading"><button type="button" className="secondary-button" onClick={() => setRefreshKey((value) => value + 1)}>ลองโหลดอีกครั้ง</button></div></td></tr> : total === 0 ? <tr><td colSpan={7}><div className="documents-empty"><Search size={27} /><strong>{showTrash ? "ไม่มีเอกสารในถังขยะ" : "ไม่พบเอกสาร"}</strong><p>{showTrash ? "เอกสารที่ลบจะอยู่ที่นี่เพื่อให้กู้คืนหรือลบถาวร" : "ลองเปลี่ยนคำค้นหาหรือตัวกรอง"}</p></div></td></tr> : visibleDocuments.map((document) => (
+            {loading ? <AdminTableLoadingRows kind="documents" /> : loadError ? <tr><td colSpan={7}><div className="document-table-loading"><button type="button" className="secondary-button" onClick={() => setRefreshKey((value) => value + 1)}>ลองโหลดอีกครั้ง</button></div></td></tr> : total === 0 ? <tr><td colSpan={7}><div className="documents-empty"><Search size={27} /><strong>{showTrash ? "ไม่มีเอกสารในถังขยะ" : "ไม่พบเอกสาร"}</strong><p>{showTrash ? "เอกสารที่ลบจะอยู่ที่นี่เพื่อให้กู้คืนหรือลบถาวร" : "ลองเปลี่ยนคำค้นหาหรือตัวกรอง"}</p></div></td></tr> : visibleDocuments.map((document) => (
               <tr key={document.id}>
                 <td>
                   <div className="document-title-cell admin-table-primary">
@@ -486,6 +492,7 @@ function DocumentEditor({
   const titleRef = useRef<HTMLInputElement>(null);
   const fileButtonRef = useRef<HTMLButtonElement>(null);
   const units = readUnits();
+  const attachedMedia = documentMedia(document);
 
   async function save(status: "draft" | "published") {
     if (savingRef.current) return;
@@ -648,7 +655,9 @@ function DocumentEditor({
                 Excel
               </p>
               {value.mediaIds.map((id) => {
-                const media = selectedMedia?.id === id ? selectedMedia : getDemoMediaItem(id);
+                const media = selectedMedia?.id === id
+                  ? selectedMedia
+                  : attachedMedia?.id === id ? attachedMedia : getDemoMediaItem(id);
                 return (
                   <article key={id}>
                     <DocumentFileIcon file={media} size={18} />
@@ -686,7 +695,6 @@ function DocumentEditor({
           {serverError ? <p className="document-error" role="alert">{serverError}</p> : null}
         </div>
         <footer className="document-editor-actions">
-          <button type="button" onClick={onClose} disabled={saving}>ยกเลิก</button>
           <button type="button" onClick={() => { void save("draft"); }} disabled={saving}>บันทึกฉบับร่าง</button>
           <div className="admin-publish-split">
             <button type="button" className="primary-button" onClick={() => { void save("published"); }} disabled={saving || (document.status === "published" && JSON.stringify(value) === JSON.stringify(document))}>{saving ? <><LoaderCircle size={16} className="document-table-spinner" />กำลังบันทึก...</> : "บันทึกและเผยแพร่"}</button>

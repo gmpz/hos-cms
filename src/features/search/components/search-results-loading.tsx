@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { usePublicLoading } from "@/components/public/use-public-loading";
 
 export function SearchResultsLoading() {
-  const [showSkeleton, setShowSkeleton] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setShowSkeleton(true), 250);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const showSkeleton = usePublicLoading(true);
 
   return <div className="site-search-results-loading" role="status" aria-live="polite" aria-label="กำลังค้นหาข้อมูล">
     {showSkeleton ? <div className="site-search-skeleton" aria-hidden="true">

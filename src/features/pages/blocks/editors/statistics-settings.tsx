@@ -6,6 +6,7 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from "@hello-p
 import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { navigationIconNames, type NavigationIconName } from "@/features/navigation/icon-names";
 import { NavigationIcon, navigationIcons } from "@/features/navigation/navigation-icons";
 import type { BlockConfigMap } from "../config/types";
@@ -125,7 +126,15 @@ function StatisticIconPicker({ value, onChange }: { value: NavigationIconName; o
       if (event.target instanceof Node && !detailsRef.current?.contains(event.target)) detailsRef.current?.removeAttribute("open");
     };
     document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
+    const stopDismissal = listenForDropdownDismissal(
+      () => detailsRef.current?.querySelector(".navigation-icon-grid"),
+      (target) => target instanceof Node && Boolean(detailsRef.current?.contains(target)),
+      () => detailsRef.current?.removeAttribute("open"),
+    );
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      stopDismissal();
+    };
   }, []);
 
   return <div className="navigation-icon-field statistics-icon-field">

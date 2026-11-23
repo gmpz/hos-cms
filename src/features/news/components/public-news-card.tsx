@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { DemoPost } from "@/features/pages/demo/data";
 import { NewsCoverImage } from "./news-cover-image";
 
-export function PublicNewsCard({ post }: { post: DemoPost }) {
+export function PublicNewsCard({ post, showExcerpt = false }: { post: DemoPost; showExcerpt?: boolean }) {
   const coverUrl = post.coverImageUrl;
   return (
     <article className="public-news-index-card">
@@ -16,6 +16,7 @@ export function PublicNewsCard({ post }: { post: DemoPost }) {
         {post.isNew ? <span className="news-new-badge">ใหม่</span> : null}
         <div>
           <h2 className="standard-news-card-title">{post.title}</h2>
+          {showExcerpt && post.excerpt ? <p className="standard-news-card-excerpt">{post.excerpt}</p> : null}
           <footer className="standard-news-card-footer"><span><CalendarDays size={14} aria-hidden="true" />{post.publishedAt ?? "ยังไม่ระบุวันที่"}</span></footer>
         </div>
       </Link>

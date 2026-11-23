@@ -13,7 +13,7 @@ export default function ProfileMastersLoading() {
     <section className="category-list-table admin-data-table">
       <div className="admin-data-table-scroll" tabIndex={0} role="region" aria-label="ตารางข้อมูลบุคลากร เลื่อนซ้ายขวาได้"><div className="category-manager-table profile-master-table admin-data-grid" role="table">
         <div className="category-manager-table-head category-manager-table-row" role="row"><span>ลำดับ</span><span>ชื่อรายการ</span><span>ผู้ใช้งาน</span><span>สถานะ</span><span>จัดการ</span></div>
-        <div className="category-manager-list" role="rowgroup"><AdminListLoadingRows columns={5} rowClassName="category-manager-table-row"/></div>
+        <div className="category-manager-list" role="rowgroup"><AdminListLoadingRows rowClassName="category-manager-table-row"/></div>
       </div></div>
     </section>
   </main>;

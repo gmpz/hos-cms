@@ -5,8 +5,6 @@ import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode, type CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { mediaPreviewStyle } from "@/features/media/demo/media-registry";
-import { readPosts, refreshPosts, seedPublicPosts } from "@/features/news/demo/storage";
-import type { DemoPost } from "@/features/pages/demo/data";
 import {
   pagesChangeEvent,
   readPageSummaries,
@@ -18,7 +16,6 @@ import {
   siteSettingsChangedEvent,
 } from "@/features/site-settings/demo/storage";
 import type { SiteSettings } from "@/features/site-settings/types";
-import { readUnits, seedPublicUnits } from "@/features/units/demo/storage";
 import { PublicNavigation } from "@/features/navigation/components/public-navigation";
 import { AccountMenu } from "@/features/auth/components/account-menu";
 import { isGoogleMapsUrl } from "@/features/site-settings/map-url";
@@ -31,7 +28,6 @@ import { PublicVisitTotal } from "@/features/analytics/components/public-visit-t
 import { LinkTargetCatalogProvider } from "@/features/navigation/link-target-catalog-context";
 import type { LinkTargetCatalog } from "@/features/navigation/resolve-link-target";
 import type { Navigation } from "@/features/navigation/types";
-import type { DemoUnit } from "@/features/units/demo/model";
 import { seedCategories } from "@/features/categories/demo/storage";
 import type { DemoCategory } from "@/features/categories/types";
 
@@ -41,8 +37,6 @@ type PublicShellClientProps = {
   initialNavigation: Navigation;
   initialNavigationAuthenticated: boolean;
   initialUser: PublicShellUser | null;
-  initialPosts: DemoPost[];
-  initialUnits: DemoUnit[];
   initialCategories: { posts: DemoCategory[]; documents: DemoCategory[] };
   linkTargetCatalog: LinkTargetCatalog;
 };
@@ -56,9 +50,7 @@ type PublicShellUser = {
   profilePhotoZoom: number;
 };
 
-export function PublicShellClient({ children, initialSettings, initialNavigation, initialNavigationAuthenticated, initialUser, initialPosts = [], initialUnits = [], initialCategories = { posts: [], documents: [] }, linkTargetCatalog }: PublicShellClientProps) {
-  seedPublicPosts(initialPosts);
-  seedPublicUnits(initialUnits);
+export function PublicShellClient({ children, initialSettings, initialNavigation, initialNavigationAuthenticated, initialUser, initialCategories = { posts: [], documents: [] }, linkTargetCatalog }: PublicShellClientProps) {
   seedCategories("posts", initialCategories.posts);
   seedCategories("documents", initialCategories.documents);
   const pathname = usePathname();
@@ -233,24 +225,43 @@ const publicRouteLabels: Record<string, string> = {
 
 function PublicBreadcrumb() {
   const pathname = usePathname();
-  const [posts, setPosts] = useState<DemoPost[]>([]);
-  const [units, setUnits] = useState<ReturnType<typeof readUnits>>([]);
+  const newsSlug = pathname.startsWith("/news/") ? pathname.split("/")[2] : undefined;
+  const unitSlug = pathname.startsWith("/units/") ? pathname.split("/")[2] : undefined;
+  const [newsTitle, setNewsTitle] = useState<{ slug: string; title: string } | null>(null);
+  const [unitTitle, setUnitTitle] = useState<{ slug: string; title: string } | null>(null);
   const [pages, setPages] = useState<ReturnType<typeof readPageSummaries>>([]);
   useEffect(() => {
+    if (!newsSlug) return;
+    const controller = new AbortController();
+    void fetch(`/api/posts/public-title?slug=${encodeURIComponent(newsSlug)}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => response.ok ? await response.json() as { title: string } : null)
+      .then((result) => {
+        if (!controller.signal.aborted && result && typeof result.title === "string")
+          setNewsTitle({ slug: newsSlug, title: result.title });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [newsSlug]);
+  useEffect(() => {
+    if (!unitSlug) return;
+    const controller = new AbortController();
+    void fetch(`/api/units/public-title?slug=${encodeURIComponent(unitSlug)}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => response.ok ? await response.json() as { title: string } : null)
+      .then((result) => {
+        if (!controller.signal.aborted && result && typeof result.title === "string")
+          setUnitTitle({ slug: unitSlug, title: result.title });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [unitSlug]);
+  useEffect(() => {
     const refresh = () => {
-      setPosts(readPosts());
-      setUnits(readUnits());
       setPages(readPageSummaries());
     };
     const timer = window.setTimeout(refresh, 0);
-    void refreshPosts().catch(() => undefined);
-    window.addEventListener("hos-posts-change", refresh);
-    window.addEventListener("hos-units-change", refresh);
     window.addEventListener(pagesChangeEvent, refresh);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener("hos-posts-change", refresh);
-      window.removeEventListener("hos-units-change", refresh);
       window.removeEventListener(pagesChangeEvent, refresh);
     };
   }, []);
@@ -269,11 +280,9 @@ function PublicBreadcrumb() {
       if (segments[1]) {
         const entityLabel =
           first === "news"
-            ? posts.find(
-                (post) => post.slug === segments[1] || post.id === segments[1],
-              )?.title
+            ? newsTitle?.slug === segments[1] ? newsTitle.title : undefined
             : first === "units"
-              ? units.find((unit) => unit.slug === segments[1])?.name
+              ? unitTitle?.slug === segments[1] ? unitTitle.title : undefined
               : undefined;
         crumbs.push({
           label:

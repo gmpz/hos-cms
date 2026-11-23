@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     (year !== "all" && year !== "latest" && (!/^\d{4}$/.test(year) || Number(year) < 2400 || Number(year) > 2800)))
     return NextResponse.json({ error: "ตัวกรองข่าวไม่ถูกต้อง" }, { status: 400 });
   const result = await listPostPage({
-    page: Number(page), pageSize: 12, search,
+    page: Number(page), pageSize: 20, search,
     categoryId: category === "all" ? null : category,
     unitId: unit === "all" ? null : unit,
     year: year === "all" ? null : year === "latest" ? "latest" : Number(year),

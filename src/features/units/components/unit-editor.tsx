@@ -3,6 +3,7 @@
 import { createId } from "@/utils/create-id";
 import type { JSONContent } from "@tiptap/react";
 import { NativeSelect } from "@/components/ui/native-select";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import {
   ArrowRight,
   ArrowLeft,
@@ -416,7 +417,7 @@ export function UnitEditor({ unitId }: { unitId: string | null }) {
         <div>
           <Link href="/admin/units">
             <ArrowLeft size={16} />
-            กลับ
+            ย้อนกลับ
           </Link>
           <h1>{unitId ? "แก้ไขกลุ่มงาน" : "สร้างกลุ่มงาน"}</h1>
           <p>{unit.name || "กำหนดข้อมูลและหน้าเว็บไซต์ของกลุ่มงาน"}</p>
@@ -1184,7 +1185,15 @@ function UnitServiceIconPicker({ value, dirty, onChange }: { value: UnitServiceG
       if (event.target instanceof Node && !detailsRef.current?.contains(event.target)) detailsRef.current?.removeAttribute("open");
     };
     document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
+    const stopDismissal = listenForDropdownDismissal(
+      () => detailsRef.current?.querySelector(".navigation-icon-grid"),
+      (target) => target instanceof Node && Boolean(detailsRef.current?.contains(target)),
+      () => detailsRef.current?.removeAttribute("open"),
+    );
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      stopDismissal();
+    };
   }, []);
   return <div className="navigation-icon-field unit-service-icon-field">
     <span>ไอคอน <UnsavedBadge show={dirty}/></span>

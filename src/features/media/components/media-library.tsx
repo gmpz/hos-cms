@@ -30,7 +30,10 @@ import { createPortal } from "react-dom";
 import { ActionToast } from "@/components/admin/action-toast";
 import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { AdminMediaLoading } from "./admin-media-loading";
 import { DocumentFileIcon } from "./document-file-icon";
+import { PdfMediaThumbnail } from "./pdf-media-thumbnail";
+import { isPdfFile } from "../file-behavior";
 import type { DemoMediaItem } from "../demo/media-items";
 import {
   addUploadedMediaItem,
@@ -397,7 +400,7 @@ export function MediaLibrary() {
           </button>
         </div>
       </div>
-      {loading && displayEntries.length === 0 ? <div className="media-empty" role="status"><LoaderCircle className="media-save-spinner" size={28}/><strong>กำลังโหลดไฟล์...</strong></div> : loadError && !loading ? (
+      {loading && displayEntries.length === 0 ? <AdminMediaLoading view={view} /> : loadError && !loading ? (
         <div className="media-empty" role="alert"><CircleAlert size={28}/><strong>{loadError}</strong><button type="button" className="primary-button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div>
       ) : displayEntries.length === 0 ? (
         <div className="media-empty">
@@ -410,7 +413,7 @@ export function MediaLibrary() {
           {displayEntries.map((entry) => entry.type === "upload" ?
             <MediaUploadCard key={`upload:${entry.task.id}`} task={entry.task} onCancel={cancelUpload} onRetry={retryUpload} onDismiss={dismissUpload}/> :
             <button key={entry.item.id} className="media-card" onClick={() => setSelectedId(entry.item.id)}>
-              <MediaPreview item={entry.item}/>
+              <MediaPreview item={entry.item} documentPreview/>
               <span><strong>{entry.item.name}</strong><small>{entry.item.size}</small></span>
             </button>
           )}
@@ -549,10 +552,18 @@ function MediaUsageDialog({ message, usages, onClose }: { message: string; usage
 function MediaPreview({
   item,
   large = false,
+  documentPreview = false,
 }: {
   item: DemoMediaItem;
   large?: boolean;
+  documentPreview?: boolean;
 }) {
+  if (item.kind === "document" && documentPreview && item.previewUrl && isPdfFile(item))
+    return (
+      <div className={`media-preview document pdf-preview ${large ? "large" : ""}`}>
+        <PdfMediaThumbnail url={item.previewUrl} name={item.name} cover={!large} />
+      </div>
+    );
   if (item.kind === "document")
     return (
       <div className={`media-preview document ${large ? "large" : ""}`}>
@@ -668,7 +679,7 @@ function MediaDrawer({
               <span className="media-preview-expand"><Maximize size={16} /> ดูรูปใหญ่</span>
             </button>
           ) : (
-            <MediaPreview item={item} large />
+            <MediaPreview item={item} large documentPreview />
           )}
           <label>
             <span>ชื่อไฟล์</span>

@@ -116,7 +116,7 @@ export function SiteProfileSettings() {
               ? "กำลังบันทึก..."
               : saved
                 ? "บันทึกแล้ว"
-                : "บันทึกการเปลี่ยนแปลง"}
+                : "บันทึกข้อมูล"}
           </button>
         </div>
       </SettingsHeading>

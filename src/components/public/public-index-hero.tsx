@@ -1,11 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 
-export function PublicIndexHero({ eyebrow, title, description, className = "", style }: {
+export function PublicIndexHero({ eyebrow, title, description, className = "", style, children }: {
   eyebrow: ReactNode;
   title: ReactNode;
   description?: ReactNode;
   className?: string;
   style?: CSSProperties;
+  children?: ReactNode;
 }) {
   return (
     <header className={`public-news-index-hero public-index-hero${className ? ` ${className}` : ""}`} style={style}>
@@ -16,6 +17,7 @@ export function PublicIndexHero({ eyebrow, title, description, className = "", s
           {description ? <span>{description}</span> : null}
         </div>
       </div>
+      {children}
     </header>
   );
 }

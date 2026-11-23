@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "ปีงบประมาณไม่ถูกต้อง" }, { status: 400 });
   const result = await listPublicDocumentPage({
     page: Number(pageText),
-    pageSize: 10,
+    pageSize: 20,
     search,
     categoryId: categoryId === "all" ? null : categoryId,
     unitId: unitId === "all" ? null : unitId,

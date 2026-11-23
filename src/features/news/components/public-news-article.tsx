@@ -1,12 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Building2, CalendarDays, Eye, Link2, Mail, Newspaper } from "lucide-react";
-import Link from "next/link";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Building2, CalendarDays, Eye, Link2, Mail } from "lucide-react";
 import type { DemoPost } from "@/features/pages/demo/data";
 import { BlockRenderer } from "@/features/pages/blocks/renderers/block-renderer";
 import { incrementPostViewCount } from "../demo/storage";
-import { PublicNewsCard } from "./public-news-card";
-export function PublicNewsArticle({ slug, initialPost, relatedPosts, categoryLabel }: { slug: string; initialPost: DemoPost | null; relatedPosts: DemoPost[]; categoryLabel: string }) {
+export function PublicNewsArticle({ slug, initialPost, relatedNews, categoryLabel }: { slug: string; initialPost: DemoPost | null; relatedNews: ReactNode; categoryLabel: string }) {
   const post = initialPost;
   const [viewCount, setViewCount] = useState(0);
   const [shareUrl, setShareUrl] = useState("");
@@ -34,7 +32,7 @@ export function PublicNewsArticle({ slug, initialPost, relatedPosts, categoryLab
   const encodedTitle = encodeURIComponent(post.title);
   return (
     <div className="public-news-page">
-      <article className="public-news-article">
+      <article className={`public-news-article${post.editorMode === "form" ? " form-news-article" : ""}`}>
         <header>
           <span>{categoryLabel}</span>
           <h1>{post.title}</h1>
@@ -54,7 +52,7 @@ export function PublicNewsArticle({ slug, initialPost, relatedPosts, categoryLab
           </div>
         </header>
         <div className="public-news-body">
-          <BlockRenderer blocks={post.blocks} pdfPositionOnly loadingPresentation="level-two" />
+          <BlockRenderer blocks={post.editorMode === "form" ? post.blocks.filter((block) => block.id !== "form-cover") : post.blocks} pdfPositionOnly />
           {shareUrl ? (
             <section className="public-news-share" aria-label="แชร์ข่าวนี้">
               <p>แชร์หน้านี้:</p>
@@ -107,25 +105,7 @@ export function PublicNewsArticle({ slug, initialPost, relatedPosts, categoryLab
           ) : null}
         </div>
       </article>
-      <section
-          className="public-related-news"
-          aria-labelledby="related-news-heading"
-        >
-          <div className="public-related-news-heading">
-            <div>
-              <p>อ่านต่อ</p>
-              <h2 id="related-news-heading">ข่าวและผลงานที่เกี่ยวข้อง</h2>
-            </div>
-          </div>
-          {relatedPosts.length > 0 ? <div className="public-related-news-grid">
-            {relatedPosts.map((item) => <PublicNewsCard key={item.id} post={item} />)}
-          </div> : <div className="public-related-news-empty" role="status">
-            <Newspaper size={27} aria-hidden="true" />
-            <strong>ยังไม่มีข่าวและผลงานที่เกี่ยวข้อง</strong>
-            <p>เมื่อมีรายการเผยแพร่เพิ่มเติม จะแสดงที่นี่</p>
-          </div>}
-          <Link className="public-related-news-view-all" href="/news">ดูข่าวทั้งหมด</Link>
-        </section>
+      {relatedNews}
     </div>
   );
 }

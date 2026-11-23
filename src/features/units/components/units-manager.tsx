@@ -18,13 +18,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { createPortal } from "react-dom";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PendingDraftStatus, StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AdminTableLoadingRows } from "@/components/admin/admin-content-loading";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import type { DemoUnit } from "../demo/model";
-import { readUnits, refreshUnits, reorderUnits } from "../demo/storage";
 import { unitCoverStyle } from "./unit-cover-style";
 
 const subscribeToHydration = () => () => undefined;
@@ -65,7 +65,12 @@ function UnitActionsMenu({
         return;
       setPosition(null);
     };
-    const closeOnScroll = () => setPosition(null);
+    const closeOnResize = () => setPosition(null);
+    const stopDismissal = listenForDropdownDismissal(
+      () => menuRef.current,
+      (target) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || menuRef.current?.contains(target)),
+      () => setPosition(null),
+    );
     const closeOnKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setPosition(null);
@@ -73,13 +78,13 @@ function UnitActionsMenu({
     };
     document.addEventListener("pointerdown", closeOnPointer);
     document.addEventListener("keydown", closeOnKey);
-    window.addEventListener("scroll", closeOnScroll, true);
-    window.addEventListener("resize", closeOnScroll);
+
+    window.addEventListener("resize", closeOnResize);
     return () => {
       document.removeEventListener("pointerdown", closeOnPointer);
       document.removeEventListener("keydown", closeOnKey);
-      window.removeEventListener("scroll", closeOnScroll, true);
-      window.removeEventListener("resize", closeOnScroll);
+      stopDismissal();
+      window.removeEventListener("resize", closeOnResize);
     };
   }, [position]);
 
@@ -166,8 +171,11 @@ export function UnitsManager() {
     () => true,
     () => false,
   );
-  const [units, setUnits] = useState<DemoUnit[]>(() => readUnits(true));
-  const [deletedUnits, setDeletedUnits] = useState<DemoUnit[]>(() => readUnits(true, true));
+  const [units, setUnits] = useState<DemoUnit[]>([]);
+  const [counts, setCounts] = useState({ active: 0, published: 0, draft: 0, trash: 0 });
+  const [total, setTotal] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft" | "trash">("all");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -186,31 +194,15 @@ export function UnitsManager() {
   const [reordering, setReordering] = useState(false);
   async function moveUnit(unit: DemoUnit, direction: "up" | "down") {
     if (reordering || search.trim() || statusFilter !== "all") return;
-    const index = units.findIndex((entry) => entry.id === unit.id);
-    const target = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || target < 0 || target >= units.length) return;
-    const next = [...units];
-    [next[index], next[target]] = [next[target], next[index]];
     setReordering(true);
-    setUnits(next);
     try {
-      setUnits(await reorderUnits(next.map((entry) => entry.id)));
-      showGlobalToast({
-        title: "จัดลำดับแล้ว",
-        description: `เลื่อน “${unit.name}”${direction === "up" ? "ขึ้น" : "ลง"}เรียบร้อย`,
-        variant: "success",
-      });
+      const response = await fetch("/api/units/admin-reorder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: unit.id, direction }) });
+      if (!response.ok) throw new Error("จัดลำดับหน่วยงานไม่สำเร็จ");
+      setRefreshKey((value) => value + 1);
+      showGlobalToast({ title: "จัดลำดับแล้ว", description: `เลื่อน “${unit.name}”${direction === "up" ? "ขึ้น" : "ลง"}เรียบร้อย`, variant: "success" });
     } catch (error) {
-      setUnits(await refreshUnits(true).catch(() => units));
-      showGlobalToast({
-        title: "จัดลำดับไม่สำเร็จ",
-        description:
-          error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง",
-        variant: "error",
-      });
-    } finally {
-      setReordering(false);
-    }
+      showGlobalToast({ title: "จัดลำดับไม่สำเร็จ", description: error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง", variant: "error" });
+    } finally { setReordering(false); }
   }
   async function handleUnpublish(unit: DemoUnit) {
     if (workingId) return;
@@ -223,7 +215,7 @@ export function UnitsManager() {
         const data = (await response.json()) as { error?: string };
         throw new Error(data.error ?? "ยกเลิกการเผยแพร่ไม่สำเร็จ");
       }
-      setUnits(await refreshUnits(true));
+      setRefreshKey((value) => value + 1);
       showGlobalToast({
         title: "ยกเลิกการเผยแพร่แล้ว",
         description: `“${unit.name}” ไม่แสดงบนเว็บไซต์แล้ว`,
@@ -250,9 +242,7 @@ export function UnitsManager() {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "ลบกลุ่มงานไม่สำเร็จ");
-      const [active, deleted] = await Promise.all([refreshUnits(true), refreshUnits(true, true)]);
-      setUnits(active);
-      setDeletedUnits(deleted);
+      setRefreshKey((value) => value + 1);
       showGlobalToast({
         title: "ย้ายกลุ่มงานไปถังขยะแล้ว",
         description: `“${unit.name}” สามารถกู้คืนได้จากถังขยะ`,
@@ -277,9 +267,7 @@ export function UnitsManager() {
       const response = await fetch(`/api/units/${unit.id}/restore`, { method: "POST" });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "กู้คืนกลุ่มงานไม่สำเร็จ");
-      const [active, deleted] = await Promise.all([refreshUnits(true), refreshUnits(true, true)]);
-      setUnits(active);
-      setDeletedUnits(deleted);
+      setRefreshKey((value) => value + 1);
       setPendingRestoreUnit(null);
       showGlobalToast({ title: "กู้คืนกลุ่มงานแล้ว", description: `“${unit.name}” กลับมาเป็นฉบับร่าง`, variant: "success" });
     } catch (error) {
@@ -295,7 +283,7 @@ export function UnitsManager() {
       const response = await fetch(`/api/units/${unit.id}/purge`, { method: "POST" });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "ลบกลุ่มงานถาวรไม่สำเร็จ");
-      setDeletedUnits(await refreshUnits(true, true));
+      setRefreshKey((value) => value + 1);
       setPendingPurgeUnit(null);
       showGlobalToast({ title: "ลบกลุ่มงานถาวรแล้ว", description: `“${unit.name}” ถูกลบออกจากระบบและกู้คืนไม่ได้`, variant: "success" });
     } catch (error) {
@@ -305,30 +293,25 @@ export function UnitsManager() {
     }
   }
   useEffect(() => {
-    let active = true;
-    void Promise.all([refreshUnits(true), refreshUnits(true, true)])
-      .then(([rows, deleted]) => {
-        if (active) { setUnits(rows); setDeletedUnits(deleted); }
-      })
-      .catch(() => {
-        if (active) setLoadError(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => setLoading(true), 0);
+    const params = new URLSearchParams({ page: String(currentPage), size: String(pageSize), search: debouncedSearch, status: statusFilter });
+    void fetch(`/api/units/admin-list?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error("โหลดรายการหน่วยงานไม่สำเร็จ"); return await response.json() as { items: DemoUnit[]; page: number; total: number; counts: typeof counts }; })
+      .then((result) => { if (controller.signal.aborted) return; setUnits(result.items); setCounts(result.counts); setTotal(result.total); setCurrentPage(result.page); setLoadError(false); })
+      .catch(() => { if (!controller.signal.aborted) setLoadError(true); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [currentPage, pageSize, debouncedSearch, statusFilter, refreshKey]);
   const tableLoading = !hydrated || loading;
-  const filtered = (statusFilter === "trash" ? deletedUnits : units).filter((unit) =>
-    (statusFilter === "all" || statusFilter === "trash" || unit.status === statusFilter) &&
-    unit.name.toLocaleLowerCase("th").includes(search.toLocaleLowerCase("th")),
-  );
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const visibleUnits = filtered.slice(pageStart, pageStart + pageSize);
+  const visibleUnits = units;
 
   return (
     <div className="units-manager">
@@ -345,19 +328,19 @@ export function UnitsManager() {
       <section className="unit-summary document-summary" aria-label="กรองกลุ่มงานตามสถานะ">
         <button type="button" aria-pressed={statusFilter === "all"} onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}>
           <span className="document-summary-icon"><Building2 size={19} /></span>
-          <span className="document-summary-copy">กลุ่มงานทั้งหมด<strong>{tableLoading ? "—" : units.length}</strong></span>
+          <span className="document-summary-copy">กลุ่มงานทั้งหมด<strong>{tableLoading ? "—" : counts.active}</strong></span>
         </button>
         <button type="button" aria-pressed={statusFilter === "published"} onClick={() => { setStatusFilter("published"); setCurrentPage(1); }}>
           <span className="document-summary-icon"><FileText size={19} /></span>
-          <span className="document-summary-copy">เผยแพร่แล้ว<strong>{tableLoading ? "—" : units.filter((unit) => unit.status === "published").length}</strong></span>
+          <span className="document-summary-copy">เผยแพร่แล้ว<strong>{tableLoading ? "—" : counts.published}</strong></span>
         </button>
         <button type="button" aria-pressed={statusFilter === "draft"} onClick={() => { setStatusFilter("draft"); setCurrentPage(1); }}>
           <span className="document-summary-icon"><Archive size={19} /></span>
-          <span className="document-summary-copy">ฉบับร่าง<strong>{tableLoading ? "—" : units.filter((unit) => unit.status === "draft").length}</strong></span>
+          <span className="document-summary-copy">ฉบับร่าง<strong>{tableLoading ? "—" : counts.draft}</strong></span>
         </button>
         <button type="button" aria-pressed={statusFilter === "trash"} onClick={() => { setStatusFilter("trash"); setCurrentPage(1); }}>
           <span className="document-summary-icon"><Trash2 size={19} /></span>
-          <span className="document-summary-copy">อยู่ในถังขยะ<strong>{tableLoading ? "—" : deletedUnits.length}</strong></span>
+          <span className="document-summary-copy">อยู่ในถังขยะ<strong>{tableLoading ? "—" : counts.trash}</strong></span>
         </button>
       </section>
       <div className="units-toolbar">
@@ -375,7 +358,7 @@ export function UnitsManager() {
       </div>
       <div className="news-list-switch" role="group" aria-label="เลือกรายการหน่วยงาน">
         <button type="button" className={statusFilter !== "trash" ? "active" : ""} aria-pressed={statusFilter !== "trash"} onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}>รายการหน่วยงาน</button>
-        <button type="button" className={statusFilter === "trash" ? "active" : ""} aria-pressed={statusFilter === "trash"} onClick={() => { setStatusFilter("trash"); setCurrentPage(1); }}><Trash2 size={15} />ถังขยะ{deletedUnits.length ? ` (${deletedUnits.length})` : ""}</button>
+        <button type="button" className={statusFilter === "trash" ? "active" : ""} aria-pressed={statusFilter === "trash"} onClick={() => { setStatusFilter("trash"); setCurrentPage(1); }}><Trash2 size={15} />ถังขยะ{counts.trash ? ` (${counts.trash})` : ""}</button>
       </div>
       <section className="units-table admin-data-table" aria-busy={tableLoading}>
         <div
@@ -399,7 +382,7 @@ export function UnitsManager() {
             </thead>
             <tbody>
               {tableLoading ? (
-                <AdminTableLoadingRows columns={6} />
+                <AdminTableLoadingRows kind="units" />
               ) : loadError ? (
                 <tr>
                   <td colSpan={6}>
@@ -410,13 +393,11 @@ export function UnitsManager() {
                     </div>
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : total === 0 ? (
                 <tr><td colSpan={6}><div className="units-empty"><Search size={28} /><strong>{statusFilter === "trash" && !search.trim() ? "ถังขยะว่าง" : "ไม่พบกลุ่มงาน"}</strong><p>{search.trim() ? "ลองเปลี่ยนคำค้นหา" : statusFilter === "trash" ? "กลุ่มงานที่ลบจะปรากฏที่นี่" : "ลองเลือกสถานะอื่น หรือสร้างกลุ่มงานใหม่"}</p></div></td></tr>
               ) : (
                 visibleUnits.map((unit, visibleIndex) => {
-                  const orderIndex = units.findIndex(
-                    (entry) => entry.id === unit.id,
-                  );
+                  const orderIndex = pageStart + visibleIndex;
                   const searching = Boolean(search.trim());
                   return (
                     <tr key={unit.id}>
@@ -445,7 +426,7 @@ export function UnitsManager() {
                                 reordering ||
                                 searching ||
                                 statusFilter !== "all" ||
-                                orderIndex === units.length - 1
+                                orderIndex === counts.active - 1
                               }
                               title={
                                 searching
@@ -542,8 +523,8 @@ export function UnitsManager() {
             </tbody>
           </table>
         </div>
-        {!tableLoading && !loadError && filtered.length > 0 ? (
-          <AdminTablePagination className="units-pagination" page={safePage} pageCount={totalPages} pageSize={pageSize} total={filtered.length} label="เปลี่ยนหน้ารายการหน่วยงาน" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
+        {!tableLoading && !loadError && total > 0 ? (
+          <AdminTablePagination className="units-pagination" page={safePage} pageCount={totalPages} pageSize={pageSize} total={total} label="เปลี่ยนหน้ารายการหน่วยงาน" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
         ) : null}
       </section>
       {pendingUnit ? (

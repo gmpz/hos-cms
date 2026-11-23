@@ -68,6 +68,22 @@ function parseInput(value: unknown): Input {
 
 export async function listSplashScreens() { return (await prisma.announcement.findMany({ where: { deletedAt: null, displayMode: "SPLASH" }, include, orderBy: [{ createdAt: "desc" }, { id: "asc" }] })).map(toDto); }
 export async function listDeletedSplashScreens() { return (await prisma.announcement.findMany({ where: { deletedAt: { not: null }, displayMode: "SPLASH" }, include, orderBy: [{ createdAt: "desc" }, { id: "asc" }] })).map(toDto); }
+export async function listAdminSplashPage(query: { page: number; pageSize: number; status: "all" | "published" | "draft" | "trash" }) {
+  const trash = query.status === "trash";
+  const where: Prisma.AnnouncementWhereInput = { displayMode: "SPLASH", deletedAt: trash ? { not: null } : null,
+    ...(query.status === "published" ? { status: "PUBLISHED" } : query.status === "draft" ? { status: "DRAFT" } : {}),
+  };
+  const base = { displayMode: "SPLASH" as const, deletedAt: null };
+  const [total, active, published, draft, deleted] = await Promise.all([
+    prisma.announcement.count({ where }), prisma.announcement.count({ where: base }),
+    prisma.announcement.count({ where: { ...base, status: "PUBLISHED" } }),
+    prisma.announcement.count({ where: { ...base, status: "DRAFT" } }),
+    prisma.announcement.count({ where: { displayMode: "SPLASH", deletedAt: { not: null } } }),
+  ]);
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+  const rows = await prisma.announcement.findMany({ where, include, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (page - 1) * query.pageSize, take: query.pageSize });
+  return { items: rows.map(toDto), page, pageSize: query.pageSize, total, counts: { active, published, draft, trash: deleted } };
+}
 export async function getSplashScreen(id: string) { const row = await prisma.announcement.findFirst({ where: { id, deletedAt: null, displayMode: "SPLASH" }, include }); return row ? adminDto(row) : null; }
 export async function getActiveSplashScreen() {
   const row = await prisma.announcement.findFirst({ where: { deletedAt: null, displayMode: "SPLASH", status: "PUBLISHED", splashSlot: 1, publishedSnapshot: { not: Prisma.DbNull } }, include });

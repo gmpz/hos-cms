@@ -128,6 +128,30 @@ export async function listCmsPages(): Promise<DemoPageSummary[]> {
   return rows.sort((left, right) => Number(right.id === "home") - Number(left.id === "home")).map(toSummary);
 }
 
+export async function listAdminCmsPagePage(query: { page: number; pageSize: number; search: string; status: "all" | "published" | "draft" | "trash" }) {
+  await ensureHomePage();
+  const trash = query.status === "trash";
+  const where: Prisma.CmsPageWhereInput = {
+    deletedAt: trash ? { not: null } : null,
+    ...(query.status === "published" ? { status: CmsPageStatus.PUBLISHED } : query.status === "draft" ? { status: CmsPageStatus.DRAFT } : {}),
+    ...(query.search.trim() ? { name: { contains: query.search.trim() } } : {}),
+  };
+  const [total, active, published, draft, deleted] = await Promise.all([
+    prisma.cmsPage.count({ where }),
+    prisma.cmsPage.count({ where: { deletedAt: null } }),
+    prisma.cmsPage.count({ where: { deletedAt: null, status: CmsPageStatus.PUBLISHED } }),
+    prisma.cmsPage.count({ where: { deletedAt: null, status: CmsPageStatus.DRAFT } }),
+    prisma.cmsPage.count({ where: { deletedAt: { not: null } } }),
+  ]);
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+  const home = trash ? null : await prisma.cmsPage.findFirst({ where: { AND: [where, { id: "home" }] } });
+  const rows = await prisma.cmsPage.findMany({ where: { AND: [where, { id: { not: "home" } }] },
+    orderBy: trash ? [{ deletedAt: "desc" }, { createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "asc" }, { id: "asc" }],
+    skip: Math.max(0, (page - 1) * query.pageSize - (home ? 1 : 0)), take: query.pageSize - (home && page === 1 ? 1 : 0),
+  });
+  return { items: [...(home && page === 1 ? [home] : []), ...rows].map(toSummary), page, pageSize: query.pageSize, total, counts: { active, published, draft, trash: deleted } };
+}
+
 export async function listDeletedCmsPages(): Promise<DemoPageSummary[]> {
   return (await prisma.cmsPage.findMany({
     where: { deletedAt: { not: null } },

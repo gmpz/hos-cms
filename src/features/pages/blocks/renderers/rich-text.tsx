@@ -1,3 +1,4 @@
+import { PublicImageLoading } from "@/components/public/public-image-loading";
 import type { JSONContent } from "@tiptap/react";
 import type { ReactNode } from "react";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
@@ -68,7 +69,7 @@ function Node({ node }: { node: JSONContent }): ReactNode {
     const src = safeImageSrc(node.attrs?.src);
     if (!src) return null;
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={typeof node.attrs?.alt === "string" ? node.attrs.alt : ""} title={typeof node.attrs?.title === "string" ? node.attrs.title : undefined} />;
+    return <span className="rich-text-image-frame"><img src={src} alt={typeof node.attrs?.alt === "string" ? node.attrs.alt : ""} title={typeof node.attrs?.title === "string" ? node.attrs.title : undefined} /><PublicImageLoading src={src}/></span>;
   }
   return children ?? null;
 }

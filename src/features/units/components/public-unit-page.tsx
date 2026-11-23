@@ -1,6 +1,6 @@
 "use client";
 import type { JSONContent } from "@tiptap/react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -15,7 +15,6 @@ import {
 import Link from "next/link";
 import type { DemoDocument } from "@/features/documents/demo/model";
 import { DocumentNewBadge } from "@/features/documents/components/document-new-badge";
-import { readDocuments, refreshDocuments } from "@/features/documents/demo/storage";
 import { documentFileUrl } from "@/features/documents/document-file-name";
 import { documentMedia } from "@/features/documents/document-media";
 import {
@@ -27,9 +26,6 @@ import { DocumentFileIcon } from "@/features/media/components/document-file-icon
 import { formatPhoneWithExtension } from "@/features/users/phone";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
 import { recordDocumentAccess } from "@/features/documents/record-document-access";
-import type { DemoPost } from "@/features/pages/demo/data";
-import { readPosts, refreshPosts } from "@/features/news/demo/storage";
-import { UnitNewsCarousel } from "./unit-news-carousel";
 import { RichText } from "@/features/pages/blocks/renderers/rich-text";
 import {
   unitSectionLabels,
@@ -38,52 +34,13 @@ import {
   type UnitSection,
 } from "../demo/model";
 import { NavigationIcon } from "@/features/navigation/navigation-icons";
-import { readUnits, refreshUnits, unitsLoaded } from "../demo/storage";
 import { personnelPhotoPositionStyle } from "./personnel-photo-position";
 import { displayMediaFor } from "@/features/media/resolved-media";
-import { PublicUnitLoading } from "@/components/public/public-page-loading";
-export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUnit?: DemoUnit }) {
+export function PublicUnitPage({ previewUnit, newsContent, initialDocuments = [], initialDocumentTotal = 0, documentsLoaded: initialDocumentsLoaded = false }: { previewUnit?: DemoUnit; newsContent?: ReactNode; initialDocuments?: DemoDocument[]; initialDocumentTotal?: number; documentsLoaded?: boolean }) {
   const pageRef = useRef<HTMLElement>(null);
-  const [unit, setUnit] = useState<DemoUnit | null>(previewUnit ?? null);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(previewUnit ? "ready" : "loading");
-  const [posts, setPosts] = useState<DemoPost[]>([]);
-  const [documents, setDocuments] = useState<DemoDocument[]>([]);
-  const [documentsLoaded, setDocumentsLoaded] = useState(false);
-  useEffect(() => {
-    let active = true;
-    const markReady = () => {
-      if (active) setLoadState("ready");
-    };
-    const refresh = () => {
-      setUnit(previewUnit ?? readUnits().find(
-        (item) => item.slug === slug && item.status === "published",
-      ) ?? null);
-      setPosts(readPosts());
-      setDocuments(readDocuments());
-      if (previewUnit || unitsLoaded()) markReady();
-    };
-    refresh();
-    if (!previewUnit) {
-      void refreshUnits().then(() => {
-        if (active) markReady();
-      }).catch(() => {
-        if (active && !unitsLoaded()) setLoadState("error");
-      });
-    }
-    void refreshPosts().catch(() => undefined);
-    void refreshDocuments().catch(() => undefined).finally(() => { if (active) setDocumentsLoaded(true); });
-    window.addEventListener("storage", refresh);
-    window.addEventListener("hos-units-change", refresh);
-    window.addEventListener("hos-posts-change", refresh);
-    window.addEventListener("hos-documents-change", refresh);
-    return () => {
-      active = false;
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("hos-units-change", refresh);
-      window.removeEventListener("hos-posts-change", refresh);
-      window.removeEventListener("hos-documents-change", refresh);
-    };
-  }, [slug, previewUnit]);
+  const unit = previewUnit ?? null;
+  const documents = initialDocuments;
+  const documentsLoaded = initialDocumentsLoaded;
   useEffect(() => {
     const page = pageRef.current;
     if (!unit || !page || typeof IntersectionObserver === "undefined" ||
@@ -145,9 +102,6 @@ export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUni
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, [unit]);
-  if (loadState === "loading") return <PublicUnitLoading />;
-  if (loadState === "error")
-    return <div className="public-unit-missing" role="alert"><h1>โหลดข้อมูลกลุ่มงานไม่สำเร็จ</h1><p>กรุณาลองโหลดหน้านี้ใหม่อีกครั้ง</p></div>;
   if (!unit)
     return (
       <div className="public-unit-missing">
@@ -159,7 +113,6 @@ export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUni
     <article ref={pageRef} className="public-unit">
       <header className="unit-hero">
         <div>
-          <span className="unit-hero-accent" aria-hidden="true" />
           <p className="unit-hero-eyebrow">หน่วยงานของโรงพยาบาล</p>
           <h1>{unit.name}</h1>
           {unit.summary ? <span className="unit-hero-summary">{unit.summary}</span> : null}
@@ -172,7 +125,8 @@ export function PublicUnitPage({ slug, previewUnit }: { slug: string; previewUni
             key={section}
             section={section}
             unit={unit}
-            posts={posts}
+            newsContent={newsContent}
+            documentTotal={initialDocumentTotal}
             documents={documents}
             documentsLoaded={documentsLoaded}
             muted={unit.sectionBackground[section]}
@@ -189,14 +143,16 @@ function hasRichTextContent(content: JSONContent): boolean {
 function UnitPublicSection({
   section,
   unit,
-  posts,
+  newsContent,
+  documentTotal,
   documents,
   documentsLoaded,
   muted,
 }: {
   section: UnitSection;
   unit: DemoUnit;
-  posts: DemoPost[];
+  newsContent?: ReactNode;
+  documentTotal: number;
   documents: DemoDocument[];
   documentsLoaded: boolean;
   muted: boolean;
@@ -306,10 +262,6 @@ function UnitPublicSection({
       </section>
     );
   if (section === "posts") {
-    const allUnitPosts = posts.filter(
-      (post) => post.status === "published" && post.unitId === unit.id,
-    );
-    const unitPosts = allUnitPosts.slice(0, 10);
     const allNewsHref = `/news?unit=${encodeURIComponent(unit.id)}&year=all`;
     return (
       <section className={`unit-public-section unit-news-section ${muted ? "muted" : ""}`}>
@@ -322,19 +274,7 @@ function UnitPublicSection({
             ดูข่าวทั้งหมด →
           </Link>
         </div>
-        {unitPosts.length ? (
-          <>
-            <UnitNewsCarousel posts={unitPosts} />
-            <div className="unit-section-list-summary"><span>แสดงข่าวล่าสุด {unitPosts.length} จาก {allUnitPosts.length} รายการ</span>{allUnitPosts.length > unitPosts.length ? <Link href={allNewsHref}>ดูข่าวที่เหลือ →</Link> : null}</div>
-          </>
-        ) : (
-          <div className="unit-post-grid">
-            <div className="unit-empty-state">
-              <strong>ไม่พบข่าวและผลงาน</strong>
-              <p>กลุ่มงานนี้ยังไม่มีข่าวหรือผลงานที่เผยแพร่</p>
-            </div>
-          </div>
-        )}
+        {newsContent}
       </section>
     );
   }
@@ -343,6 +283,7 @@ function UnitPublicSection({
       <UnitDocumentsSection
         unit={unit}
         documents={documents}
+        total={documentTotal}
         documentsLoaded={documentsLoaded}
         muted={muted}
       />
@@ -419,11 +360,13 @@ function UnitPublicSection({
 function UnitDocumentsSection({
   unit,
   documents,
+  total,
   documentsLoaded,
   muted,
 }: {
   unit: DemoUnit;
   documents: DemoDocument[];
+  total: number;
   documentsLoaded: boolean;
   muted: boolean;
 }) {
@@ -482,7 +425,7 @@ function UnitDocumentsSection({
               );
             })}
           </div>
-          <div className="unit-section-list-summary"><span>แสดงเอกสารล่าสุด {visibleDocuments.length} จาก {unitDocuments.length} รายการ</span>{unitDocuments.length > visibleDocuments.length ? <Link href={allDocumentsHref}>ดูเอกสารที่เหลือ →</Link> : null}</div>
+          <div className="unit-section-list-summary"><span>แสดงเอกสารล่าสุด {visibleDocuments.length} จาก {total} รายการ</span>{total > visibleDocuments.length ? <Link href={allDocumentsHref}>ดูเอกสารที่เหลือ →</Link> : null}</div>
         </>
       ) : (
         <div className="unit-empty-state">

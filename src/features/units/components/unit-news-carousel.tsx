@@ -75,7 +75,7 @@ export function UnitNewsCarousel({ posts }: { posts: DemoPost[] }) {
         </button>
       </div>
       <div className="unit-post-grid" ref={trackRef} aria-label="ข่าวล่าสุดของกลุ่มงาน">
-        {posts.map((post) => <PublicNewsCard post={post} key={post.id} />)}
+        {posts.map((post) => <PublicNewsCard post={post} key={post.id} showExcerpt />)}
       </div>
     </div>
   );

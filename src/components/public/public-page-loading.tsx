@@ -4,13 +4,11 @@ import type { ThemeTokens } from "@/features/site-settings/types";
 
 export function PublicPageLoading({ label }: { label: string }) {
   return (
-    <div className="admin-content-loading public-content-loading-level-two" data-public-page-loading="" role="status" aria-busy="true" aria-live="polite" aria-label={label}>
-      <div className="admin-content-loading-indicator" aria-hidden="true">
-        <span className="admin-content-loading-dots"><i /><i /><i /></span>
-        <b className="admin-content-loading-percentage" />
-        <p>กรุณารอสักครู่...</p>
+    <div className="public-content-loading-level-two public-route-loading" data-public-page-loading="" role="status" aria-busy="true" aria-live="polite" aria-label={label}>
+      <div className="public-route-loading-indicator">
+        <span className="public-route-loading-spinner" aria-hidden="true" />
+        <span>กำลังโหลดเนื้อหา...</span>
       </div>
-      <span className="public-loading-sr-only">{label}</span>
     </div>
   );
 }
@@ -40,28 +38,6 @@ export function PublicInitialLoading({ theme, overlay = false }: { theme?: Theme
   return overlay
     ? <div className="admin-initial-loading public-initial-loading public-home-loading-overlay" data-public-page-loading="" style={style} role="status" aria-live="polite" aria-label="กำลังเปิดเว็บไซต์โรงพยาบาล">{content}</div>
     : <main className="admin-initial-loading public-initial-loading" data-public-page-loading="" style={style} role="status" aria-live="polite" aria-label="กำลังเปิดเว็บไซต์โรงพยาบาล">{content}</main>;
-}
-
-export function PublicUnitLoading() {
-  return (
-    <article className="public-unit public-unit-loading" role="status" aria-busy="true" aria-live="polite" aria-label="กำลังโหลดข้อมูลหน่วยงาน">
-      <header className="unit-hero public-unit-loading-hero" aria-hidden="true">
-        <div>
-          <span className="public-loading-shape public-unit-loading-eyebrow" />
-          <span className="public-loading-shape public-unit-loading-title" />
-          <span className="public-loading-shape public-unit-loading-summary" />
-        </div>
-      </header>
-      <section className="unit-public-section public-unit-loading-section" aria-hidden="true">
-        <span className="public-loading-shape public-unit-loading-section-title" />
-        <div className="public-unit-loading-cards">
-          <span className="public-loading-shape" />
-          <span className="public-loading-shape" />
-        </div>
-      </section>
-      <span className="public-loading-sr-only">กำลังโหลดข้อมูลหน่วยงาน...</span>
-    </article>
-  );
 }
 
 export function PublicAuthLoading({ label }: { label: string }) {

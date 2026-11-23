@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { publicMetadata } from "@/server/metadata/public-metadata";
 
-export const metadata: Metadata = { title: "ประกาศความเป็นส่วนตัว | โรงพยาบาลคลองหลวง" };
+export async function generateMetadata(): Promise<Metadata> {
+  return publicMetadata({ path: "/privacy-policy", title: "ประกาศความเป็นส่วนตัว", description: "ข้อมูลการเก็บ ใช้ และเปิดเผยข้อมูลส่วนบุคคลบนเว็บไซต์โรงพยาบาลคลองหลวง" });
+}
 
 export default function PrivacyPolicyPage() {
   return (

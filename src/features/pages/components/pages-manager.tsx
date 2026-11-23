@@ -21,14 +21,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AdminContentLoading } from "@/components/admin/admin-content-loading";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { DemoPageStatus, DemoPageSummary } from "../demo/pages";
 import {
   actOnPageSummary,
-  fetchDeletedPageSummaries,
-  pagesChangeEvent,
-  readPageSummaries,
-  refreshPageSummaries,
 } from "../demo/page-list-storage";
 import { isReservedPagePath } from "../reserved-paths";
 
@@ -43,21 +40,21 @@ function normalizePath(value: string) {
     .replace(/\/{2,}/g, "/");
 }
 
-export function PagesManager({
-  initialPages,
-  initialDeletedPages,
-}: {
-  initialPages: DemoPageSummary[];
-  initialDeletedPages: DemoPageSummary[];
-}) {
+export function PagesManager() {
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     () => true,
     () => false,
   );
   const router = useRouter();
-  const [pages, setPages] = useState(initialPages);
-  const [deletedPages, setDeletedPages] = useState(initialDeletedPages);
+  const [pages, setPages] = useState<DemoPageSummary[]>([]);
+  const [counts, setCounts] = useState({ active: 0, published: 0, draft: 0, trash: 0 });
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | DemoPageStatus | "trash">("all");
@@ -70,17 +67,9 @@ export function PagesManager({
     page: DemoPageSummary;
   } | null>(null);
   const [actionPending, setActionPending] = useState(false);
-  const query = search.trim().toLocaleLowerCase("th");
-  const sourcePages = filter === "trash" ? deletedPages : pages;
-  const filtered = sourcePages.filter(
-    (page) =>
-      (!query || page.name.toLocaleLowerCase("th").includes(query)) &&
-      (filter === "all" || filter === "trash" || page.status === filter),
-  );
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const pageStart = (safePage - 1) * pageSize;
-  const visiblePages = filtered.slice(pageStart, pageStart + pageSize);
+  const visiblePages = pages;
   function selectFilter(next: typeof filter) {
     setFilter(next);
     setCurrentPage(1);
@@ -94,37 +83,33 @@ export function PagesManager({
         return;
       setOpenMenu(null);
     };
+    const stopDismissal = listenForDropdownDismissal(
+      () => document.querySelector(".page-row-menu"),
+      (target) => target instanceof Element && Boolean(target.closest("[data-page-row-menu]")),
+      () => setOpenMenu(null),
+    );
     document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      stopDismissal();
+    };
   }, [openMenu]);
   useEffect(() => {
-    const refresh = () => {
-      setPages(readPageSummaries());
-    };
-    const fetchPages = () => {
-      void Promise.all([refreshPageSummaries(), fetchDeletedPageSummaries()])
-        .then(([active, deleted]) => {
-          setPages(active);
-          setDeletedPages(deleted);
-        })
-        .catch(() => undefined);
-    };
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    fetchPages();
-    window.addEventListener(pagesChangeEvent, refresh);
-    window.addEventListener("focus", fetchPages);
-    window.addEventListener("pageshow", fetchPages);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    return () => {
-      window.removeEventListener(pagesChangeEvent, refresh);
-      window.removeEventListener("focus", fetchPages);
-      window.removeEventListener("pageshow", fetchPages);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
-  }, []);
-  if (!hydrated) return <AdminContentLoading />;
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => setLoading(true), 0);
+    const params = new URLSearchParams({ page: String(currentPage), size: String(pageSize), search: debouncedSearch, status: filter });
+    void fetch(`/api/pages/admin-list?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error("โหลดรายการหน้าเว็บไซต์ไม่สำเร็จ"); return await response.json() as { items: DemoPageSummary[]; page: number; total: number; counts: typeof counts }; })
+      .then((result) => { if (controller.signal.aborted) return; setPages(result.items); setCounts(result.counts); setTotal(result.total); setCurrentPage(result.page); setLoadError(""); setHasLoaded(true); })
+      .catch((error: unknown) => { if (!controller.signal.aborted) { setLoadError(error instanceof Error ? error.message : "โหลดรายการหน้าเว็บไซต์ไม่สำเร็จ"); setHasLoaded(true); } })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [currentPage, pageSize, debouncedSearch, filter, refreshKey]);
+  if (!hydrated || (loading && !hasLoaded)) return <AdminContentLoading />;
   async function act(
     page: DemoPageSummary,
     action:
@@ -140,11 +125,10 @@ export function PagesManager({
     setActionError("");
     setActionPending(true);
     try {
-      await actOnPageSummary(page.id, action, page.revision, values);
-      setPages(readPageSummaries());
+      await actOnPageSummary(page.id, action, page.revision, values, true);
+      setRefreshKey((value) => value + 1);
       setPendingAction(null);
       setEditing(null);
-      setDeletedPages(await fetchDeletedPageSummaries());
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : "จัดการหน้าไม่สำเร็จ",
@@ -175,6 +159,7 @@ export function PagesManager({
           สร้างหน้าใหม่
         </Link>
       </header>
+      {loadError ? <p role="alert" className="create-page-error">{loadError}</p> : null}
       {actionError ? (
         <p role="alert" className="create-page-error">
           {actionError}
@@ -193,7 +178,7 @@ export function PagesManager({
             <FileText size={19} />
           </span>
           <span className="document-summary-copy">
-            ทั้งหมด<strong>{pages.length}</strong>
+            ทั้งหมด<strong>{counts.active}</strong>
           </span>
         </button>
         <button
@@ -207,7 +192,7 @@ export function PagesManager({
           <span className="document-summary-copy">
             เผยแพร่แล้ว
             <strong>
-              {pages.filter((page) => page.status === "published").length}
+              {counts.published}
             </strong>
           </span>
         </button>
@@ -222,7 +207,7 @@ export function PagesManager({
           <span className="document-summary-copy">
             ฉบับร่าง
             <strong>
-              {pages.filter((page) => page.status === "draft").length}
+              {counts.draft}
             </strong>
           </span>
         </button>
@@ -235,7 +220,7 @@ export function PagesManager({
             <Trash2 size={19} />
           </span>
           <span className="document-summary-copy">
-            อยู่ในถังขยะ<strong>{deletedPages.length}</strong>
+            อยู่ในถังขยะ<strong>{counts.trash}</strong>
           </span>
         </button>
       </section>
@@ -273,11 +258,11 @@ export function PagesManager({
           onClick={() => selectFilter("trash")}
         >
           <Trash2 size={15} />
-          ถังขยะ{deletedPages.length ? ` (${deletedPages.length})` : ""}
+          ถังขยะ{counts.trash ? ` (${counts.trash})` : ""}
         </button>
       </div>
       <section className="pages-table-card admin-data-table">
-        {sourcePages.length === 0 ? (
+        {total === 0 ? (
           <EmptyState
             icon={filter === "trash" ? Archive : FileText}
             title={filter === "trash" ? "ถังขยะว่าง" : "ยังไม่มีหน้าเว็บไซต์"}
@@ -454,7 +439,7 @@ export function PagesManager({
                 </tbody>
               </table>
             </div>
-            {filtered.length === 0 ? (
+            {total === 0 ? (
               <EmptyState
                 icon={Search}
                 title="ไม่พบหน้าที่ค้นหา"
@@ -465,7 +450,7 @@ export function PagesManager({
                 page={safePage}
                 pageCount={totalPages}
                 pageSize={pageSize}
-                total={filtered.length}
+                total={total}
                 label="เปลี่ยนหน้ารายการเว็บไซต์"
                 onPageChange={setCurrentPage}
                 onPageSizeChange={(size) => {

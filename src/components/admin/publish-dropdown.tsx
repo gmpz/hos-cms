@@ -2,6 +2,7 @@
 
 import { ChevronDown, EyeOff } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 
 type PublishDropdownProps = {
   variant?: "admin" | "announcement";
@@ -25,6 +26,11 @@ export function PublishDropdown({ variant = "admin", disabled = false, onUnpubli
       close();
       detailsRef.current?.querySelector("summary")?.focus();
     };
+    const stopDismissal = listenForDropdownDismissal(
+      () => detailsRef.current?.querySelector(".announcement-publish-menu,.admin-publish-menu"),
+      (target) => target instanceof Node && Boolean(detailsRef.current?.contains(target)),
+      close,
+    );
     document.addEventListener("pointerdown", closeOutside);
     document.addEventListener("focusin", closeOnFocusOutside);
     document.addEventListener("keydown", closeOnEscape);
@@ -34,6 +40,7 @@ export function PublishDropdown({ variant = "admin", disabled = false, onUnpubli
       document.removeEventListener("pointerdown", closeOutside);
       document.removeEventListener("focusin", closeOnFocusOutside);
       document.removeEventListener("keydown", closeOnEscape);
+      stopDismissal();
       window.removeEventListener("popstate", close);
       window.removeEventListener("pageshow", close);
     };

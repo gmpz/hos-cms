@@ -83,7 +83,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
     version: 1 as const,
     visibility: "visible" as const,
     surface: "default" as const,
-    width: "standard" as const,
+    width: "full" as const,
     position: "center" as const,
     headingAlign: "left" as const,
     headingSize: "standard" as const,
@@ -238,7 +238,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           title: "บริการของเรา",
           description: "เลือกบริการหรือข้อมูลที่ต้องการ",
           presentation: "cards",
-          columns: 3,
+          columns: 4,
           items: [
             {
               id: createId(),
@@ -267,7 +267,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
     case "serviceGroups":
       return {
         ...base,
-        version: 4,
+        version: 6,
         type,
         config: {
           title: "ท่านต้องการรับบริการในด้านใด?",
@@ -512,7 +512,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
           description: "ติดตามข่าวสารและผลงานล่าสุดของโรงพยาบาล",
           source: { kind: "all" as const },
           categoryId: null,
-          limit: 3,
+          limit: 4,
           layout: "grid" as const,
           showViewAll: true,
         },
@@ -552,7 +552,7 @@ export function createBlock(type: BuilderKind, id: string): BuilderBlock {
               fiscalYear: "all",
             },
           ],
-          limit: 6,
+          limit: 10,
         },
       };
     case "iframe":
@@ -862,14 +862,14 @@ export function isDemoPage(value: unknown): value is DemoPage {
         );
       case "serviceGroups":
         return (
-          b.version === 4 &&
+          b.version === 6 &&
           typeof c.title === "string" &&
           typeof c.description === "string" &&
-          [2, 3].includes(Number(c.columns)) &&
+          c.columns === 3 &&
           Array.isArray(c.groups) &&
           c.groups.length >= 1 && c.groups.length <= 6 &&
           c.groups.every((group) => record(group) && typeof group.id === "string" && typeof group.title === "string" &&
-            navigationIconNames.includes(group.icon as (typeof navigationIconNames)[number]) &&
+            (group.icon === null || navigationIconNames.includes(group.icon as (typeof navigationIconNames)[number])) &&
             ["primary", "secondary", "accent"].includes(String(group.accent)) &&
             Array.isArray(group.items) && group.items.length <= 8 && group.items.every((item) => record(item) && typeof item.id === "string" && typeof item.label === "string" && typeof item.openInNewTab === "boolean" && record(item.target) && ["external", "entity", "module"].includes(String(item.target.kind))))
         );
@@ -1124,7 +1124,7 @@ export function isDemoPage(value: unknown): value is DemoPage {
           ) &&
           Number.isInteger(c.limit) &&
           Number(c.limit) >= 1 &&
-          Number(c.limit) <= 12
+          Number(c.limit) <= 20
         );
       case "spacer":
         return (

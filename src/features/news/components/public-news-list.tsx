@@ -2,9 +2,10 @@
 
 import { Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PublicPagination } from "@/components/public/public-pagination";
 import { PublicIndexHero } from "@/components/public/public-index-hero";
+import { ContentDataSkeleton } from "@/features/pages/blocks/renderers/content-data-skeleton";
 import {
   categoriesChangedEvent,
   readCategories,
@@ -15,9 +16,7 @@ import { postsChangeEvent } from "../demo/storage";
 import { fetchPostListPage, type PostListPage } from "../list-page";
 import { PublicNewsCard } from "./public-news-card";
 
-const pageSize = 12;
-const skeletonDelayMs = 180;
-const skeletonMinimumMs = 320;
+const pageSize = 20;
 
 export function PublicNewsList({
   initialUnit = "all",
@@ -42,31 +41,13 @@ export function PublicNewsList({
   const [categoryId, setCategoryId] = useState(initialCategory);
   const [year, setYear] = useState(initialYear);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showSkeleton, setShowSkeleton] = useState(false);
-  const skeletonStartedAt = useRef<number | null>(null);
   const queryKey = JSON.stringify([currentPage, debouncedSearch, unitId, categoryId, year, refreshKey]);
   const loading = loadedKey !== queryKey;
 
-  useEffect(() => {
-    const timers: number[] = [];
-    if (loading) {
-      skeletonStartedAt.current = null;
-      timers.push(window.setTimeout(() => setShowSkeleton(false), 0));
-      timers.push(window.setTimeout(() => {
-        skeletonStartedAt.current = performance.now();
-        setShowSkeleton(true);
-      }, skeletonDelayMs));
-    } else if (skeletonStartedAt.current !== null) {
-      const visibleFor = performance.now() - skeletonStartedAt.current;
-      timers.push(window.setTimeout(() => {
-        skeletonStartedAt.current = null;
-        setShowSkeleton(false);
-      }, Math.max(0, skeletonMinimumMs - visibleFor)));
-    } else {
-      timers.push(window.setTimeout(() => setShowSkeleton(false), 0));
-    }
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [loading]);
+  const showSkeleton = loading || search.trim() !== debouncedSearch;
+  const skeletonCount = currentPage > 1 && postPage
+    ? Math.max(1, Math.min(pageSize, postPage.total - (currentPage - 1) * pageSize))
+    : pageSize;
 
   useEffect(() => {
     const refresh = () => {
@@ -110,7 +91,7 @@ export function PublicNewsList({
   }, [currentPage, debouncedSearch, unitId, categoryId, year, refreshKey]);
 
   if (loading && !postPage && !loadError)
-    return <PublicNewsSkeleton showCards={showSkeleton} />;
+    return <PublicNewsSkeleton count={skeletonCount} />;
 
   const categoryCounts = postPage?.categoryCounts ?? {};
   const yearTotal = Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
@@ -128,6 +109,7 @@ export function PublicNewsList({
   const safePage = postPage?.page ?? 1;
   const visiblePosts = postPage?.items ?? [];
   const selectedUnit = units.find((unit) => unit.id === unitId);
+  const hasActiveFilters = Boolean(search.trim()) || unitId !== "all" || categoryId !== "all" || year !== "latest";
 
   function updateUrl(nextUnit: string, nextCategory: string, nextYear: string) {
     const url = new URL(window.location.href);
@@ -150,6 +132,14 @@ export function PublicNewsList({
     setCurrentPage(1);
     setCategoryId(nextCategory);
     updateUrl(unitId, nextCategory, year);
+  }
+  function clearFilters() {
+    setSearch("");
+    setCurrentPage(1);
+    setUnitId("all");
+    setCategoryId("all");
+    setYear("latest");
+    updateUrl("all", "all", "latest");
   }
 
   return (
@@ -210,14 +200,16 @@ export function PublicNewsList({
             </NativeSelect>
           </label>
         </div>
-        <div className="public-news-index-summary">
-          <strong>{total}</strong> รายการ
-          {selectedUnit ? ` จาก ${selectedUnit.name}` : ""}
+        <div className="public-list-summary">
+          <div>
+            <span>รายการข่าว</span>
+            <p>{showSkeleton ? "กำลังโหลดรายการข่าว..." : <><strong>{total}</strong> รายการ{selectedUnit ? ` จาก ${selectedUnit.name}` : ""}</>}</p>
+          </div>
         </div>
-        {showSkeleton ? <NewsCardSkeletonGrid /> : loadError ? <div className="public-news-index-empty" role="alert"><Search size={30} /><h2>โหลดข่าวไม่สำเร็จ</h2><p>{loadError}</p><button onClick={() => setRefreshKey((value) => value + 1)}>ลองใหม่</button></div> : total ? (
+        {showSkeleton ? <ContentDataSkeleton kind="news-grid" count={skeletonCount} immediate /> : loadError ? <div className="public-news-index-empty" role="alert"><Search size={30} /><h2>โหลดข่าวไม่สำเร็จ</h2><p>{loadError}</p><button onClick={() => setRefreshKey((value) => value + 1)}>ลองใหม่</button></div> : total ? (
           <div className="public-news-index-grid public-news-list-grid news-card-grid-ready" key={loadedKey}>
             {visiblePosts.map((post) => (
-              <PublicNewsCard key={post.id} post={post} />
+              <PublicNewsCard key={post.id} post={post} showExcerpt />
             ))}
           </div>
         ) : (
@@ -225,14 +217,7 @@ export function PublicNewsList({
             <Search size={30} />
             <h2>ไม่พบข่าว</h2>
             <p>ยังไม่มีข่าวตรงกับกลุ่มงาน หมวดหมู่ หรือคำค้นหานี้</p>
-            <button
-              onClick={() => {
-                setSearch("");
-                changeCategory("all");
-              }}
-            >
-              ล้างการค้นหา
-            </button>
+            {hasActiveFilters ? <button onClick={clearFilters}>ล้างตัวกรองทั้งหมด</button> : null}
           </div>
         )}
         {!loading && !showSkeleton && !loadError ? <PublicPagination currentPage={safePage} totalItems={total} pageSize={pageSize} onPageChange={setCurrentPage} label="เปลี่ยนหน้ารายการข่าว" /> : null}
@@ -241,7 +226,7 @@ export function PublicNewsList({
   );
 }
 
-function PublicNewsSkeleton({ showCards }: { showCards: boolean }) {
+export function PublicNewsSkeleton({ count }: { count: number }) {
   return (
     <div className="public-news-index public-news-index-skeleton" role="status" aria-busy="true" aria-live="polite" aria-label="กำลังโหลดข่าวสาร">
       <PublicIndexHero
@@ -256,26 +241,9 @@ function PublicNewsSkeleton({ showCards }: { showCards: boolean }) {
           <label className="public-owner-filter"><span>ปีที่เผยแพร่</span><NativeSelect disabled aria-label="ปีที่เผยแพร่"><option>ปีล่าสุด</option></NativeSelect></label>
           <label className="public-owner-filter"><span>เจ้าของเนื้อหา</span><NativeSelect disabled aria-label="เจ้าของเนื้อหา"><option>ทั้งหมด</option></NativeSelect></label>
         </div>
-        <div className="public-news-index-summary">กำลังโหลดรายการข่าว...</div>
-        {showCards ? <NewsCardSkeletonGrid announce={false} /> : <div className="news-card-skeleton-delay" aria-hidden="true" />}
+        <div className="public-list-summary"><div><span>รายการข่าว</span><p>กำลังโหลดรายการข่าว...</p></div></div>
+        <ContentDataSkeleton kind="news-grid" count={count} immediate />
       </div>
-    </div>
-  );
-}
-
-function NewsCardSkeletonGrid({ announce = true }: { announce?: boolean }) {
-  return (
-    <div className="public-news-index-grid public-news-list-grid news-card-skeleton-grid" role={announce ? "status" : undefined} aria-label={announce ? "กำลังโหลดรายการข่าว" : undefined}>
-      {Array.from({ length: 8 }, (_, index) => (
-        <article className="news-card-skeleton" aria-hidden="true" key={index}>
-          <span className="news-skeleton-block news-card-skeleton-cover" />
-          <div>
-            <span className="news-skeleton-block news-card-skeleton-title" />
-            <span className="news-skeleton-block news-card-skeleton-title short" />
-            <span className="news-skeleton-block news-card-skeleton-date" />
-          </div>
-        </article>
-      ))}
     </div>
   );
 }

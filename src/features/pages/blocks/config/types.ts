@@ -165,11 +165,11 @@ export interface BlockConfigMap {
   serviceGroups: {
     title: string;
     description: string;
-    columns: 2 | 3;
+    columns: 3;
     groups: {
       id: EntityId;
       title: string;
-      icon: NavigationIconName;
+      icon: NavigationIconName | null;
       accent: "primary" | "secondary" | "accent";
       items: {
         id: EntityId;
@@ -336,7 +336,7 @@ export type PageBlock = {
     version: K extends "hero"
       ? 3
       : K extends "serviceGroups"
-        ? 4
+        ? 6
       : K extends "heading"
         ? 2
       : K extends "faq"

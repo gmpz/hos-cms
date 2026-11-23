@@ -6,6 +6,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import Link from "next/link";
 import { createPortal } from "react-dom";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { useEffect, useRef, useState } from "react";
 import { PendingDraftStatus, StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -19,6 +20,7 @@ import { categoriesChangedEvent, categoryName, readCategories } from "@/features
 import type { DemoCategory } from "@/features/categories/types";
 import { actOnPost, postsChangeEvent } from "../demo/storage";
 import { fetchPostListPage, type PostListPage } from "../list-page";
+import { NewsCreationDialog } from "./news-creation-dialog";
 const confirmationCharacters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function newConfirmationCode(): string {
@@ -39,7 +41,12 @@ function NewsActionsMenu({ post, disabled, onAction }: { post: DemoPost; disable
       if (menuRef.current?.contains(event.target as Node) || triggerRef.current?.contains(event.target as Node)) return;
       setPosition(null);
     };
-    const closeOnScroll = () => setPosition(null);
+    const closeOnResize = () => setPosition(null);
+    const stopDismissal = listenForDropdownDismissal(
+      () => menuRef.current,
+      (target) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || menuRef.current?.contains(target)),
+      () => setPosition(null),
+    );
     const closeOnKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setPosition(null);
@@ -47,13 +54,13 @@ function NewsActionsMenu({ post, disabled, onAction }: { post: DemoPost; disable
     };
     document.addEventListener("pointerdown", closeOnPointer);
     document.addEventListener("keydown", closeOnKey);
-    window.addEventListener("scroll", closeOnScroll, true);
-    window.addEventListener("resize", closeOnScroll);
+
+    window.addEventListener("resize", closeOnResize);
     return () => {
       document.removeEventListener("pointerdown", closeOnPointer);
       document.removeEventListener("keydown", closeOnKey);
-      window.removeEventListener("scroll", closeOnScroll, true);
-      window.removeEventListener("resize", closeOnScroll);
+      stopDismissal();
+      window.removeEventListener("resize", closeOnResize);
     };
   }, [position]);
 
@@ -80,6 +87,7 @@ function NewsActionsMenu({ post, disabled, onAction }: { post: DemoPost; disable
 }
 
 export function NewsManager() {
+  const [creationOpen, setCreationOpen] = useState(false);
   const [postPage, setPostPage] = useState<PostListPage | null>(null);
   const [loadedKey, setLoadedKey] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -171,7 +179,7 @@ export function NewsManager() {
           <h1>ข่าวและผลงาน</h1>
           <p>สร้างข่าวครั้งเดียว แล้วเลือกให้แสดงในข่าวรวมและหน้ากลุ่มงานได้</p>
         </div>
-        <div className="news-heading-actions"><Link href="/admin/posts/new" className="primary-button"><Plus size={16} />สร้างข่าว</Link></div>
+        <div className="news-heading-actions"><button type="button" className="primary-button" onClick={() => setCreationOpen(true)}><Plus size={16} />สร้างข่าว</button></div>
       </header>
       <div className={`news-toolbar${showTrash ? " trash-mode" : ""}`}>
         <label className="news-search">
@@ -242,7 +250,7 @@ export function NewsManager() {
             </tr>
           </thead>
           <tbody>
-            {loading ? <AdminTableLoadingRows columns={6} /> : null}
+            {loading ? <AdminTableLoadingRows kind="news" /> : null}
             {!loading && !loadError && total === 0 ? <tr><td colSpan={6}><div className="news-empty"><Search size={28} /><strong>{showTrash ? "ไม่มีข่าวในถังขยะ" : "ไม่พบข่าว"}</strong><p>{showTrash ? "ข่าวที่ลบจะปรากฏที่นี่เพื่อให้กู้คืนหรือลบถาวร" : "ลองเปลี่ยนคำค้นหาหรือตัวกรอง"}</p></div></td></tr> : null}
             {!loading && visiblePosts.map((post) => (
               <tr key={post.id}>
@@ -253,7 +261,6 @@ export function NewsManager() {
                     </span>
                     <div>
                       <strong>{post.title}</strong>
-                      <small>{post.excerpt}</small>
                     </div>
                   </div>
                 </td>
@@ -300,6 +307,7 @@ export function NewsManager() {
           <AdminTablePagination className="news-pagination" page={safePage} pageCount={totalPages} pageSize={pageSize} total={total} label="เปลี่ยนหน้ารายการข่าวและผลงาน" onPageChange={setCurrentPage} onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}/>
         ) : null}
       </section>
+      {creationOpen ? <NewsCreationDialog onClose={() => setCreationOpen(false)}/> : null}
       {pendingAction?.action === "purge" ? <div className="modal-layer" onKeyDown={(event) => { if (event.key === "Escape") setPendingAction(null); }}>
         <button type="button" className="modal-backdrop" aria-label="ปิดหน้าต่างยืนยัน" onClick={() => setPendingAction(null)} />
         <div className="cms-confirm-dialog news-purge-dialog" role="alertdialog" aria-modal="true" aria-labelledby="news-purge-title" aria-describedby="news-purge-description">

@@ -1,4 +1,4 @@
-import { NewsEditor } from "@/features/news/components/news-editor";
+import { NewsEditorEntry } from "@/features/news/components/news-editor-entry";
 export const instant = false;
 export default async function EditPostPage({
   params,
@@ -6,5 +6,5 @@ export default async function EditPostPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <NewsEditor key={id} postId={id} />;
+  return <NewsEditorEntry key={id} postId={id} />;
 }

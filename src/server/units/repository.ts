@@ -1,6 +1,6 @@
 import "server-only";
 import { PageAccessLevel, Prisma, UnitStatus, type Unit } from "@prisma/client";
-import type { DemoUnit } from "@/features/units/demo/model";
+import type { DemoUnit, UnitPersonnel } from "@/features/units/demo/model";
 import type { AuthUser } from "@/server/auth/session";
 import { emptyAccessGrants } from "@/features/access/types";
 import { parseAccessGrants, replaceUnitGrants } from "@/server/access/repository";
@@ -100,6 +100,116 @@ export async function listUnits(includeDrafts: boolean, user: AuthUser | null = 
   });
   const units = await hydrateCoverImages(await hydratePersonnelProfiles(rows.map((row) => toDto(row, !includeDrafts)), includeDrafts));
   return units;
+}
+
+function publicUnitWhere(user: AuthUser | null): Prisma.UnitWhereInput {
+  return {
+    id: { not: "hospital" }, deletedAt: null, status: UnitStatus.PUBLISHED,
+    publishedSlug: { not: null }, publishedPayload: { not: Prisma.DbNull },
+    ...(user?.role === "ADMIN" ? {} : { OR: [
+      { publishedAccessLevel: PageAccessLevel.PUBLIC },
+      ...(user && !user.mustChangePassword ? [
+        { publishedAccessLevel: PageAccessLevel.AUTHENTICATED },
+        { publishedAccessLevel: PageAccessLevel.CUSTOM, landingAccessGrants: { some: { OR: [
+          { userId: user.id },
+          { unit: { userMemberships: { some: { userId: user.id } } } },
+        ] } } },
+      ] : []),
+    ] }),
+  };
+}
+
+export async function listPublicUnitPage(query: { page: number; pageSize: number; search: string }, user: AuthUser | null) {
+  const search = query.search.trim();
+  const where: Prisma.UnitWhereInput = { AND: [publicUnitWhere(user),
+    ...(search ? [{ OR: [
+      { publishedPayload: { path: "$.name", string_contains: search } },
+      { publishedPayload: { path: "$.shortName", string_contains: search } },
+      { publishedSlug: { contains: search } },
+    ] }] : []),
+  ],
+  };
+  const total = await prisma.unit.count({ where });
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+  const rows = await prisma.unit.findMany({ where, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], skip: (page - 1) * query.pageSize, take: query.pageSize });
+  const items = await hydrateCoverImages(await hydratePersonnelProfiles(rows.map((row) => toDto(row, true)), false));
+  return { items: items.map((unit) => ({ id: unit.id, slug: unit.slug, name: unit.name, coverImageUrl: unit.coverImageUrl, coverFocus: unit.coverFocus, personnelCount: unit.personnel.length })), page, pageSize: query.pageSize, total };
+}
+
+export async function getPublicUnitBySlug(slug: string, user: AuthUser | null): Promise<DemoUnit | null> {
+  const row = await prisma.unit.findFirst({ where: { ...publicUnitWhere(user), publishedSlug: slug } });
+  if (!row) return null;
+  const [unit] = await hydrateCoverImages(await hydratePersonnelProfiles([toDto(row, true)], false));
+  return unit;
+}
+
+export async function getPublicUnitTitleBySlug(slug: string, user: AuthUser | null): Promise<string | null> {
+  const row = await prisma.unit.findFirst({ where: { ...publicUnitWhere(user), publishedSlug: slug }, select: { publishedPayload: true, name: true } });
+  const payload = row?.publishedPayload;
+  return payload && typeof payload === "object" && !Array.isArray(payload) && typeof payload.name === "string" ? payload.name : row?.name ?? null;
+}
+
+export async function listPublicPersonnel(query: { unitId: string | null; limit: number }, user: AuthUser | null): Promise<Array<UnitPersonnel & { unitName: string }>> {
+  const where: Prisma.UnitWhereInput = { AND: [publicUnitWhere(user), ...(query.unitId ? [{ id: query.unitId }] : [])] };
+  const people: Array<UnitPersonnel & { unitName: string }> = [];
+  let cursor: string | undefined;
+  const batchSize = query.unitId ? 1 : 20;
+  while (people.length < query.limit) {
+    const rows = await prisma.unit.findMany({
+      where,
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }],
+      take: batchSize,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (!rows.length) break;
+    const units = await hydratePersonnelProfiles(rows.map((row) => toDto(row, true)), false);
+    for (const unit of units) {
+      for (const person of unit.personnel) {
+        people.push({ ...person, unitName: unit.shortName || unit.name });
+        if (people.length === query.limit) return people;
+      }
+    }
+    if (query.unitId || rows.length < batchSize) break;
+    cursor = rows.at(-1)!.id;
+  }
+  return people;
+}
+
+export async function listAdminUnitPage(query: { page: number; pageSize: number; search: string; status: "all" | "published" | "draft" | "trash" }) {
+  const trash = query.status === "trash";
+  const where: Prisma.UnitWhereInput = {
+    id: { not: "hospital" },
+    deletedAt: trash ? { not: null } : null,
+    ...(query.status === "published" ? { status: UnitStatus.PUBLISHED } : query.status === "draft" ? { status: UnitStatus.DRAFT } : {}),
+    ...(query.search.trim() ? { name: { contains: query.search.trim() } } : {}),
+  };
+  const [total, active, published, draft, deleted] = await Promise.all([
+    prisma.unit.count({ where }),
+    prisma.unit.count({ where: { id: { not: "hospital" }, deletedAt: null } }),
+    prisma.unit.count({ where: { id: { not: "hospital" }, deletedAt: null, status: UnitStatus.PUBLISHED } }),
+    prisma.unit.count({ where: { id: { not: "hospital" }, deletedAt: null, status: UnitStatus.DRAFT } }),
+    prisma.unit.count({ where: { id: { not: "hospital" }, deletedAt: { not: null } } }),
+  ]);
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+  const rows = await prisma.unit.findMany({
+    where,
+    orderBy: trash ? [{ deletedAt: "desc" }, { name: "asc" }] : [{ sortOrder: "asc" }, { name: "asc" }],
+    skip: (page - 1) * query.pageSize,
+    take: query.pageSize,
+  });
+  const items = await hydrateCoverImages(rows.map((row) => toDto(row)));
+  return { items, page, pageSize: query.pageSize, total, counts: { active, published, draft, trash: deleted } };
+}
+
+export async function moveAdminUnit(id: string, direction: "up" | "down"): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const rows = await tx.unit.findMany({ where: { id: { not: "hospital" }, deletedAt: null }, select: { id: true, sortOrder: true, name: true, updatedAt: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+    const index = rows.findIndex((row) => row.id === id);
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= rows.length) throw new UnitInputError("ไม่สามารถเลื่อนลำดับหน่วยงาน", 409);
+    [rows[index], rows[target]] = [rows[target], rows[index]];
+    await Promise.all(rows.map((row, sortOrder) => row.sortOrder === sortOrder ? Promise.resolve() : tx.unit.update({ where: { id: row.id }, data: { sortOrder, updatedAt: row.updatedAt } })));
+  });
 }
 
 export async function reorderUnits(ids: string[]): Promise<void> {

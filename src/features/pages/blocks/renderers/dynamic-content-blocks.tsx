@@ -1,4 +1,5 @@
 "use client";
+import { PublicDocumentRow } from "@/features/documents/components/public-document-row";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -8,23 +9,21 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  LoaderCircle,
 } from "lucide-react";
 import { documentsChangeEvent, fetchPublicDocumentBlockPage, type PublicDocumentBlockPage } from "@/features/documents/demo/storage";
 import { documentFileUrl } from "@/features/documents/document-file-name";
 import { documentMedia } from "@/features/documents/document-media";
 import { recordDocumentAccess } from "@/features/documents/record-document-access";
 import { DocumentNewBadge } from "@/features/documents/components/document-new-badge";
-import { isPdfFile } from "@/features/media/file-behavior";
 import { DocumentFileIcon } from "@/features/media/components/document-file-icon";
 import { DocumentFileLink } from "@/features/media/components/document-file-link";
-import { publicPostsAreLoaded, readPosts, refreshPosts } from "@/features/news/demo/storage";
-import type { DemoPost } from "@/features/pages/demo/data";
+import { postsChangeEvent } from "@/features/news/demo/storage";
+import type { PublicPostBlockPage } from "@/features/news/public-post-block-page";
 import { NewsCoverImage } from "@/features/news/components/news-cover-image";
 import { PublicNewsCard } from "@/features/news/components/public-news-card";
 import type { BlockConfigMap } from "../config/types";
 import { SecondaryRichText } from "./secondary-rich-text";
-import { DynamicBlockSkeleton } from "./dynamic-block-skeleton";
+import { ContentDataSkeleton } from "./content-data-skeleton";
 
 function documentPaginationItems(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
   if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -43,53 +42,59 @@ function documentPaginationItems(totalPages: number, currentPage: number): Array
 
 export function PostsContentBlock({
   config,
+  initialPage,
 }: {
   config: BlockConfigMap["posts"];
+  initialPage?: PublicPostBlockPage;
 }) {
-  const [posts, setPosts] = useState<DemoPost[]>(() => readPosts());
-  const [loading, setLoading] = useState(() => !publicPostsAreLoaded());
-  const filterKey = JSON.stringify([config.categoryId, config.limit, config.layout, config.source]);
-  const [pageState, setPageState] = useState({ filterKey, page: 1 });
-  const page = pageState.filterKey === filterKey ? pageState.page : 1;
-  const setPage = (nextPage: number) => setPageState({ filterKey, page: nextPage });
+  const [result, setResult] = useState<PublicPostBlockPage | null>(initialPage ?? null);
+  const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [loadedKey, setLoadedKey] = useState(initialPage ? JSON.stringify([config.source, config.categoryId, config.limit, 1, 0]) : "");
+  const [loadError, setLoadError] = useState("");
+  const requestKey = JSON.stringify([config.source, config.categoryId, config.limit, page, refreshKey]);
   useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      setPosts(readPosts());
-    };
-    void refreshPosts().then((items) => {
-      if (active) setPosts(items);
-    }).catch(() => undefined).finally(() => {
-      if (active) setLoading(false);
-    });
-    window.addEventListener("hos-posts-change", refresh);
-    return () => {
-      active = false;
-      window.removeEventListener("hos-posts-change", refresh);
-    };
+    const refresh = () => setRefreshKey((value) => value + 1);
+    window.addEventListener(postsChangeEvent, refresh);
+    return () => window.removeEventListener(postsChangeEvent, refresh);
   }, []);
-  const filteredItems = posts.filter(
-      (post) =>
-        post.status === "published" &&
-        (!config.categoryId || post.categoryId === config.categoryId) &&
-        (config.source.kind === "all" ||
-          (config.source.kind === "hospital"
-            ? post.unitId === null
-            : post.unitId === config.source.unitId)),
-    );
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / config.limit));
-  const currentPage = Math.min(page, totalPages);
-  const items = filteredItems.slice(
-    (currentPage - 1) * config.limit,
-    currentPage * config.limit,
-  );
-  if (loading) return <DynamicBlockSkeleton layout={config.layout === "grid" ? "cards" : "rows"} items={config.limit} label="กำลังโหลดข่าวภายในบล็อก" />;
+  useEffect(() => {
+    if (loadedKey === requestKey) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(page), limit: String(config.limit), source: config.source.kind });
+    if (config.source.kind === "unit") params.set("unit", config.source.unitId);
+    if (config.categoryId) params.set("category", config.categoryId);
+    void fetch(`/api/posts/block-list?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const payload: unknown = await response.json();
+        if (!response.ok || typeof payload !== "object" || payload === null || !("items" in payload) || !Array.isArray(payload.items) ||
+          !("total" in payload) || typeof payload.total !== "number" || !("page" in payload) || typeof payload.page !== "number")
+          throw new Error("โหลดข่าวไม่สำเร็จ");
+        return payload as PublicPostBlockPage;
+      })
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        setResult(next);
+        setLoadedKey(JSON.stringify([config.source, config.categoryId, config.limit, next.page, refreshKey]));
+        setLoadError("");
+        if (next.page !== page) setPage(next.page);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) { setLoadError("โหลดข่าวไม่สำเร็จ"); setLoadedKey(requestKey); }
+      });
+    return () => controller.abort();
+  }, [config.source, config.categoryId, config.limit, page, refreshKey, requestKey, loadedKey]);
+  const loading = loadedKey !== requestKey;
+
+  const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / config.limit));
+  const currentPage = result?.page ?? page;
+  const items = result?.items ?? [];
   const pagination = totalPages > 1 ? (
     <nav className="document-block-pagination posts-block-pagination" aria-label="หน้าข่าวและผลงาน">
       <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16}/></button>
-      {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
-        <button type="button" className={pageNumber === currentPage ? "active" : ""} aria-current={pageNumber === currentPage ? "page" : undefined} onClick={() => setPage(pageNumber)} key={pageNumber}>{pageNumber}</button>
-      ))}
+      {documentPaginationItems(totalPages, currentPage).map((item, index) => item === "ellipsis"
+        ? <span aria-hidden="true" key={`ellipsis-${index}`}>…</span>
+        : <button type="button" className={item === currentPage ? "active" : ""} aria-current={item === currentPage ? "page" : undefined} onClick={() => setPage(item)} key={item}>{item}</button>)}
       <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16}/></button>
     </nav>
   ) : null;
@@ -105,7 +110,7 @@ export function PostsContentBlock({
           </div>
         </div>
       </header>
-      {items.length ? (
+      {loading ? <ContentDataSkeleton kind={config.layout === "grid" ? "news-grid" : "news-list"} count={config.limit}/> : items.length ? (
         <div
           className={
             config.layout === "grid"
@@ -119,7 +124,7 @@ export function PostsContentBlock({
               ? undefined
               : { backgroundImage: "url(/hospital-logo.png)" };
             return config.layout === "grid" ? (
-              <PublicNewsCard key={post.id} post={post} />
+              <PublicNewsCard key={post.id} post={post} showExcerpt />
             ) : (
               <Link href={`/news/${post.slug}`} key={post.id}>
                 <span
@@ -149,6 +154,7 @@ export function PostsContentBlock({
         <p className="block-placeholder">ยังไม่มีข่าวที่เผยแพร่ในหมวดนี้</p>
       )}
       {pagination}
+      {loadError ? <p role="alert">{loadError} <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></p> : null}
     </div>
   );
 }
@@ -233,25 +239,21 @@ export function DocumentsContentBlock({
   };
   const isLoading = loadedKey !== requestKey;
   if (!activeTab) return <div className="document-block-empty" role="alert"><p>ยังไม่มีแท็บเอกสารสำหรับบล็อกนี้</p></div>;
-  if (isLoading && !result) return <DynamicBlockSkeleton layout={config.layout === "cards" ? "cards" : "rows"} tabs={config.tabs.length} items={config.limit} label="กำลังโหลดเอกสารภายในบล็อก" />;
+
   if (loadError && !result) return <div className="document-block-empty" role="alert"><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div>;
-  const displayedTabId = result && config.tabs.some((tab) => tab.id === resultTabId) ? resultTabId : activeTab?.id;
-  const pendingTabId = isLoading && displayedTabId !== activeTab?.id ? activeTab?.id : null;
-  const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / config.limit));
-  const currentPage = result?.page ?? page;
-  const items = result?.items ?? [];
+  const activeResult = resultTabId === activeTab.id ? result : null;
+  const totalPages = Math.max(1, Math.ceil((activeResult?.total ?? 0) / config.limit));
+  const currentPage = activeResult?.page ?? page;
+  const items = activeResult?.items ?? [];
   const retryNotice = loadError && !isLoading ? <div className="document-block-empty" role="alert"><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div> : null;
   const pagination = totalPages > 1 ? (
-    <nav className="document-block-pagination document-block-pagination-with-status" aria-label="หน้าเอกสาร">
+    <nav className="document-block-pagination" aria-label="หน้าเอกสาร">
       <button type="button" disabled={isLoading || currentPage === 1} onClick={() => setPage(currentPage - 1)} aria-label="หน้าก่อนหน้า"><ChevronLeft size={16} /></button>
       {documentPaginationItems(totalPages, currentPage).map((item, index) => item === "ellipsis"
         ? <span className="document-block-pagination-ellipsis" aria-hidden="true" key={`ellipsis-${index}`}>…</span>
         : <button type="button" disabled={isLoading} className={`document-block-pagination-page${item === currentPage ? " active" : ""}${Math.abs(item - currentPage) > 1 ? " is-distant" : ""}`} aria-current={item === currentPage ? "page" : undefined} onClick={() => setPage(item)} key={item}>{item}</button>
       )}
       <button type="button" disabled={isLoading || currentPage === totalPages} onClick={() => setPage(currentPage + 1)} aria-label="หน้าถัดไป"><ChevronRight size={16} /></button>
-      <span className="document-block-pagination-status" role="status" aria-live="polite">
-        {isLoading ? <><LoaderCircle size={16} aria-hidden="true" /><span className="public-loading-sr-only">กำลังโหลดหน้าเอกสาร</span></> : null}
-      </span>
     </nav>
   ) : null;
   return (
@@ -300,9 +302,8 @@ export function DocumentsContentBlock({
               <button
                 type="button"
                 role="tab"
-                aria-selected={tab.id === displayedTabId}
-                aria-label={tab.id === pendingTabId ? `${tab.label} กำลังโหลด` : undefined}
-                className={tab.id === displayedTabId ? "active" : tab.id === pendingTabId ? "is-pending" : ""}
+                aria-selected={tab.id === activeTab.id}
+                className={tab.id === activeTab.id ? "active" : ""}
                 key={tab.id}
                 onClick={(event) => {
                   setActiveId(tab.id);
@@ -320,7 +321,7 @@ export function DocumentsContentBlock({
           </div>
         </div>
       ) : null}
-      {config.layout === "table" ? (
+      {isLoading ? <ContentDataSkeleton kind={config.layout === "table" ? "table" : "documents"} count={activeResult ? Math.min(config.limit, Math.max(0, activeResult.total - (page - 1) * config.limit)) : config.limit} footer={pagination}/> : config.layout === "table" ? (
         items.length ? (
           <div className="document-block-table-shell" role="tabpanel">
             <div className="document-block-table-wrap">
@@ -382,63 +383,17 @@ export function DocumentsContentBlock({
           </div>
         ) : (
           <div className="document-block-empty" role="tabpanel">
-            <p>ยังไม่มีเอกสารเผยแพร่ในแท็บนี้</p>
+            <p>{isLoading ? "กำลังโหลดเอกสาร" : "ยังไม่มีเอกสารเผยแพร่ในแท็บนี้"}</p>
             {retryNotice}
           </div>
         )
       ) : (
       <div className="unit-document-list document-block-list" role="tabpanel">
         {items.length ? (
-          items.map((document) => {
-            const media = documentMedia(document);
-            if (media && isPdfFile(media)) {
-              return (
-                <div className="unit-document-row-with-download" key={document.id}>
-                  <DocumentFileLink className="unit-document-open" media={media} href={documentFileUrl(document.id, document.title, media.mimeType)}>
-                    <DocumentFileIcon file={media} size={19} />
-                    <span>
-                      <strong>{document.title}</strong>
-                      <small className="document-block-card-meta">
-                        <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
-                        <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
-                        <DocumentNewBadge isNew={document.isNew}/>
-                      </small>
-                    </span>
-                  </DocumentFileLink>
-                  <a className="public-document-action public-document-download" href={documentFileUrl(document.id, document.title, media.mimeType, "download")} aria-label={`ดาวน์โหลด PDF ${document.title}`} title="ดาวน์โหลด PDF" onClick={() => recordDocumentAccess(document.id, "download")}><Download size={16}/><span>{media.size}</span></a>
-                </div>
-              );
-            }
-            const content = (
-              <>
-                <DocumentFileIcon file={media} size={19} />
-                <span>
-                  <strong>{document.title}</strong>
-                  <small className="document-block-card-meta">
-                    <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
-                    <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
-                    <DocumentNewBadge isNew={document.isNew}/>
-                  </small>
-                </span>
-                {media ? <span className="public-document-action public-document-download unit-document-download-indicator" title="ดาวน์โหลดไฟล์"><Download size={16} aria-hidden="true"/><span>{media.size}</span></span> : <b className="public-document-action">{document.mediaIds.length} ไฟล์</b>}
-              </>
-            );
-            if (!media) {
-              return (
-                <div key={document.id}>
-                  {content}
-                </div>
-              );
-            }
-            return (
-              <DocumentFileLink media={media} href={documentFileUrl(document.id, document.title, media.mimeType)} key={document.id}>
-                {content}
-              </DocumentFileLink>
-            );
-          })
+          items.map((document) => <PublicDocumentRow key={document.id} document={document}/>)
         ) : (
           <div className="document-block-empty">
-            <p>ยังไม่มีเอกสารเผยแพร่ในแท็บนี้</p>
+            <p>{isLoading ? "กำลังโหลดเอกสาร" : "ยังไม่มีเอกสารเผยแพร่ในแท็บนี้"}</p>
           </div>
         )}
         {pagination}

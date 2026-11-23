@@ -13,6 +13,8 @@ function PdfPage({ document, number, width, scrollRoot }: {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
+  const [renderedWidth, setRenderedWidth] = useState(0);
+  const [failedWidth, setFailedWidth] = useState(0);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -56,8 +58,9 @@ function PdfPage({ document, number, width, scrollRoot }: {
         transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
       });
       await task.promise;
+      if (!cancelled) setRenderedWidth(width);
     };
-    void render().catch(() => undefined);
+    void render().catch(() => { if (!cancelled) setFailedWidth(width); });
     return () => {
       cancelled = true;
       task?.cancel();
@@ -65,6 +68,8 @@ function PdfPage({ document, number, width, scrollRoot }: {
   }, [document, number, visible, width]);
 
   return <div className="pdf-viewer-mobile-page" ref={wrapperRef} style={{ width }}>
+    {renderedWidth !== width && failedWidth !== width ? <span className="pdf-page-skeleton public-loading-shape" role="status" aria-label={`กำลังโหลดหน้า ${number}`}/> : null}
+    {failedWidth === width ? <p role="alert">ไม่สามารถแสดงหน้านี้ได้</p> : null}
     <canvas ref={canvasRef} aria-label={`หน้า ${number}`} role="img" />
   </div>;
 }
@@ -154,7 +159,7 @@ function PdfPages({ url, title }: { url: string; title: string }) {
     </div>
     <div className="pdf-viewer-mobile-pages" ref={setScrollRoot} onScroll={updateCurrentPage}>
       {failed ? <p>ไม่สามารถแสดง PDF ได้ <a href={url} target="_blank" rel="noopener noreferrer">เปิดไฟล์ PDF</a></p> : null}
-      {!failed && !document ? <p>กำลังโหลด PDF...</p> : null}
+      {!failed && !document ? <div className="pdf-document-skeleton public-loading-shape" role="status" aria-label="กำลังโหลด PDF"/> : null}
       {document && pageWidth > 0 ? Array.from({ length: document.numPages }, (_, index) => (
         <PdfPage key={index + 1} document={document} number={index + 1} width={pageWidth} scrollRoot={scrollRoot} />
       )) : null}

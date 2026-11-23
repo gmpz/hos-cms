@@ -18,3 +18,12 @@ export async function listPublicCategoryCatalog(): Promise<{ posts: DemoCategory
     documents: toCatalog(CategoryScope.DOCUMENTS),
   };
 }
+
+export async function categoryUsageCounts(scope: "posts" | "documents"): Promise<Record<string, number>> {
+  if (scope === "posts") {
+    const groups = await prisma.post.groupBy({ by: ["categoryId"], where: { deletedAt: null }, _count: { _all: true } });
+    return Object.fromEntries(groups.map((group) => [group.categoryId, group._count._all]));
+  }
+  const groups = await prisma.document.groupBy({ by: ["categoryId"], where: { deletedAt: null }, _count: { _all: true } });
+  return Object.fromEntries(groups.map((group) => [group.categoryId, group._count._all]));
+}

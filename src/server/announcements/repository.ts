@@ -121,6 +121,33 @@ export async function listDeletedAnnouncements(): Promise<AnnouncementDto[]> {
   return Promise.all(rows.map(toDto));
 }
 
+export async function listAdminModalPage(query: { page: number; pageSize: number; status: "all" | "published" | "draft" | "trash" }) {
+  const trash = query.status === "trash";
+  const where: Prisma.AnnouncementWhereInput = { displayMode: "MODAL", deletedAt: trash ? { not: null } : null,
+    ...(query.status === "published" ? { status: AnnouncementStatus.PUBLISHED } : query.status === "draft" ? { status: AnnouncementStatus.DRAFT } : {}),
+  };
+  const base = { displayMode: "MODAL" as const, deletedAt: null };
+  const [total, active, published, draft, deleted] = await Promise.all([
+    prisma.announcement.count({ where }), prisma.announcement.count({ where: base }),
+    prisma.announcement.count({ where: { ...base, status: AnnouncementStatus.PUBLISHED } }),
+    prisma.announcement.count({ where: { ...base, status: AnnouncementStatus.DRAFT } }),
+    prisma.announcement.count({ where: { displayMode: "MODAL", deletedAt: { not: null } } }),
+  ]);
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+  const offset = (page - 1) * query.pageSize;
+  const statusFilter = query.status === "published" ? Prisma.sql`AND status = 'PUBLISHED'` : query.status === "draft" ? Prisma.sql`AND status = 'DRAFT'` : Prisma.empty;
+  const ids = trash
+    ? await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM cms_announcements WHERE display_mode = 'MODAL' AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id ASC LIMIT ${query.pageSize} OFFSET ${offset}`)
+    : await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM cms_announcements WHERE display_mode = 'MODAL' AND deleted_at IS NULL ${statusFilter}
+      ORDER BY CASE WHEN COALESCE(CASE WHEN status = 'PUBLISHED' THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(published_snapshot, '$.priority')) AS UNSIGNED) ELSE priority END, priority) = 0 THEN 1 ELSE 0 END ASC,
+      COALESCE(CASE WHEN status = 'PUBLISHED' THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(published_snapshot, '$.priority')) AS UNSIGNED) ELSE priority END, priority) ASC,
+      updated_at DESC, id ASC LIMIT ${query.pageSize} OFFSET ${offset}`);
+  const rows = await prisma.announcement.findMany({ where: { id: { in: ids.map((item) => item.id) } }, include });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const items = await Promise.all(ids.flatMap(({ id }) => { const row = byId.get(id); return row ? [toDto(row)] : []; }));
+  return { items, page, pageSize: query.pageSize, total, counts: { active, published, draft, trash: deleted } };
+}
+
 export async function getAnnouncement(id: string): Promise<AnnouncementDto | null> {
   const row = await prisma.announcement.findFirst({ where: { id, deletedAt: null, displayMode: "MODAL" }, include });
   return row ? toDto(row) : null;

@@ -1,9 +1,12 @@
 "use client";
-
 import { useEffect, useState } from "react";
+import { PublicEmbed } from "@/components/public/public-embed";
+import { ContentDataSkeleton } from "./content-data-skeleton";
+import { PublicImageLoading } from "@/components/public/public-image-loading";
 import type { BlockConfigMap, PageBlock } from "../config/types";
 import type { PublicDocumentBlockPage } from "@/features/documents/demo/storage";
 import type { DemoPost } from "@/features/pages/demo/data";
+import type { PublicPostBlockPage } from "@/features/news/public-post-block-page";
 import { normalizeBlockPosition } from "../config/layout";
 import { BannerSlider, SingleBanner } from "./banner-slider";
 import { RichText } from "./rich-text";
@@ -27,7 +30,6 @@ import { DocumentFileLink } from "@/features/media/components/document-file-link
 import { useLinkTargetResolver } from "@/features/navigation/link-target-catalog-context";
 import { NavigationIcon } from "@/features/navigation/navigation-icons";
 import { pagesChangeEvent } from "@/features/pages/demo/page-list-storage";
-import { readUnits } from "@/features/units/demo/storage";
 import { formatPhoneWithExtension } from "@/features/users/phone";
 import {
   ArrowRight,
@@ -56,54 +58,33 @@ export function BlockRenderer({
   blocks,
   adminPreview = false,
   pdfPositionOnly = false,
-  loadingDelayMs = 0,
-  loadingPresentation = "skeleton",
   initialDocumentPages,
   initialNewsTabPosts,
+  initialPostBlockPages,
 }: {
   blocks: PageBlock[];
   adminPreview?: boolean;
   pdfPositionOnly?: boolean;
-  loadingDelayMs?: number;
-  loadingPresentation?: "skeleton" | "level-two";
   initialDocumentPages?: Record<string, PublicDocumentBlockPage>;
   initialNewsTabPosts?: Record<string, DemoPost[]>;
+  initialPostBlockPages?: Record<string, PublicPostBlockPage>;
 }) {
   const [, setMediaRevision] = useState(0);
-  const [mediaReady, setMediaReady] = useState(false);
   const resolveTarget = useLinkTargetResolver();
 
   useEffect(() => {
+    let active = true;
     const refresh = () => setMediaRevision((revision) => revision + 1);
     window.addEventListener(pagesChangeEvent, refresh);
-    return () => window.removeEventListener(pagesChangeEvent, refresh);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    let delayTimer: number | undefined;
-    const refresh = () => {
-      if (active) setMediaRevision((revision) => revision + 1);
-    };
     const unsubscribe = subscribeDemoMedia(refresh);
-    const delay = loadingDelayMs > 0
-      ? new Promise<void>((resolve) => { delayTimer = window.setTimeout(resolve, loadingDelayMs); })
-      : Promise.resolve();
-    void delay.then(() => {
-      refresh();
-      if (active) setMediaReady(true);
-    });
+    const timer = window.setTimeout(() => { if (active) refresh(); }, 0);
     return () => {
       active = false;
-      if (delayTimer !== undefined) window.clearTimeout(delayTimer);
+      window.clearTimeout(timer);
+      window.removeEventListener(pagesChangeEvent, refresh);
       unsubscribe();
     };
-  }, [loadingDelayMs]);
-
-  // The route payload already includes the media URL needed by each block.
-  if (!mediaReady && loadingPresentation === "skeleton") {
-    return <BlockSkeletonRenderer blocks={blocks} />;
-  }
+  }, []);
 
   return (
     <>
@@ -391,7 +372,7 @@ export function BlockRenderer({
                 aria-hidden="true"
               />
             )}
-            {b.type === "posts" && <PostsContentBlock config={b.config} />}
+            {b.type === "posts" && <PostsContentBlock config={b.config} initialPage={initialPostBlockPages?.[b.id]} />}
             {b.type === "newsTabs" && <TabbedNewsBlock config={b.config} initialPosts={initialNewsTabPosts?.[b.id]} />}
             {b.type === "documents" && (
               <DocumentsContentBlock config={b.config} initialPage={initialDocumentPages?.[b.id]} />
@@ -400,146 +381,6 @@ export function BlockRenderer({
         ))}
     </>
   );
-}
-
-function BlockSkeletonRenderer({ blocks }: { blocks: PageBlock[] }) {
-  const visibleBlocks = blocks.filter((block) => block.visibility === "visible");
-
-  return (
-    <>
-      <span className="public-loading-sr-only" role="status" aria-live="polite">
-        กำลังโหลดเนื้อหาภายในหน้า...
-      </span>
-      {visibleBlocks.map((block) => (
-        <section
-          key={block.id}
-          className={`${blockContainerClassName(block)} block-content-skeleton block-content-skeleton-${block.type}`}
-          aria-hidden="true"
-        >
-          <BlockSkeleton block={block} />
-        </section>
-      ))}
-    </>
-  );
-}
-
-function SkeletonLines({ count = 3 }: { count?: number }) {
-  return (
-    <div className="block-skeleton-lines">
-      {Array.from({ length: count }, (_, index) => (
-        <span className="public-loading-shape" key={index} />
-      ))}
-    </div>
-  );
-}
-
-function SkeletonCards({ count, columns = 3 }: { count: number; columns?: number }) {
-  return (
-    <div className={`block-skeleton-cards columns-${Math.min(4, Math.max(2, columns))}`}>
-      {Array.from({ length: Math.min(6, Math.max(1, count)) }, (_, index) => (
-        <article key={index}>
-          <span className="public-loading-shape block-skeleton-card-icon" />
-          <SkeletonLines count={3} />
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function SkeletonRows({ count = 4 }: { count?: number }) {
-  return (
-    <div className="block-skeleton-rows">
-      {Array.from({ length: Math.min(6, Math.max(1, count)) }, (_, index) => (
-        <div key={index}>
-          <span className="public-loading-shape block-skeleton-row-icon" />
-          <SkeletonLines count={2} />
-          <span className="public-loading-shape block-skeleton-row-action" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SkeletonHeading() {
-  return (
-    <div className="block-skeleton-heading">
-      <span className="public-loading-shape" />
-      <span className="public-loading-shape" />
-    </div>
-  );
-}
-
-function BlockSkeleton({ block }: { block: PageBlock }) {
-  switch (block.type) {
-    case "hero":
-    case "bannerSlider": {
-      const height = block.config.height;
-      return (
-        <div className={`banner-slider banner-height-${height} block-skeleton-banner`}>
-          <div><SkeletonLines count={3} /></div>
-        </div>
-      );
-    }
-    case "heading":
-      return <span className="public-loading-shape block-skeleton-heading-only" />;
-    case "text":
-    case "cardText":
-    case "quote":
-    case "alert":
-      return <SkeletonLines count={block.type === "text" ? 5 : 3} />;
-    case "image":
-      if (block.config.mode === "imageText") return <div className="block-skeleton-image-text"><span className="public-loading-shape block-skeleton-media" /><SkeletonLines count={5} /></div>;
-      return <><SkeletonHeading /><span className="public-loading-shape block-skeleton-media" /></>;
-    case "imageText":
-      return <div className="block-skeleton-image-text"><span className="public-loading-shape block-skeleton-media" /><SkeletonLines count={5} /></div>;
-    case "video":
-      if (block.config.mode === "videoText") return <div className="block-skeleton-image-text"><span className="public-loading-shape block-skeleton-media" /><SkeletonLines count={5} /></div>;
-      return <><SkeletonHeading /><span className="public-loading-shape block-skeleton-media" /></>;
-    case "iframe":
-    case "pdfViewer":
-    case "map":
-      return <><SkeletonHeading /><span className="public-loading-shape block-skeleton-media" /></>;
-    case "cta":
-      return <div className="block-skeleton-cta"><SkeletonLines count={2} /><span className="public-loading-shape" /></div>;
-    case "links":
-      return <SkeletonCards count={block.config.items.length} columns={Math.min(4, block.config.items.length)} />;
-    case "linkCards":
-      return <><SkeletonHeading /><SkeletonCards count={block.config.items.length} columns={block.config.columns} /></>;
-    case "serviceGroups":
-      return <><SkeletonHeading /><SkeletonCards count={block.config.groups.length} columns={block.config.columns} /></>;
-    case "gallery":
-      return <><SkeletonHeading /><div className={`block-skeleton-gallery columns-${block.config.columns}`}>{Array.from({ length: Math.min(6, Math.max(1, block.config.images.length)) }, (_, index) => <span className="public-loading-shape" key={index} />)}</div></>;
-    case "faq":
-      return <>{block.config.title || block.config.description ? <SkeletonHeading /> : null}<SkeletonRows count={block.config.items.length} /></>;
-    case "table":
-      return <><SkeletonHeading /><div className="block-skeleton-table"><SkeletonRows count={block.config.rows.length + 1} /></div></>;
-    case "statistics":
-      return <><SkeletonHeading /><SkeletonCards count={block.config.items.length} columns={block.config.columns} /></>;
-    case "personnel":
-      return <><SkeletonHeading /><SkeletonCards count={block.config.limit} columns={block.config.columns} /></>;
-    case "processSteps":
-      return <><SkeletonHeading /><SkeletonRows count={block.config.items.length} /></>;
-    case "contactInfo":
-      return <><SkeletonHeading /><SkeletonCards count={4} columns={2} /></>;
-    case "timeline":
-      return <><SkeletonHeading /><SkeletonRows count={block.config.items.length} /></>;
-    case "downloads":
-      return <><SkeletonHeading /><SkeletonRows count={block.config.files.length} /></>;
-    case "documentList":
-      return <><SkeletonHeading /><SkeletonRows count={block.config.items.length} /></>;
-    case "schedule":
-      return <div className="block-skeleton-schedule"><SkeletonLines count={2} /><SkeletonLines count={3} /></div>;
-    case "posts":
-      return <><SkeletonHeading />{block.config.layout === "list" ? <SkeletonRows count={block.config.limit} /> : <SkeletonCards count={block.config.limit} columns={3} />}</>;
-    case "newsTabs":
-      return <><SkeletonHeading /><div className="block-skeleton-tabs">{block.config.tabs.map((tab) => <span className="public-loading-shape" key={tab.id} />)}</div><SkeletonCards count={4} columns={3} /></>;
-    case "documents":
-      return <><SkeletonHeading /><div className="block-skeleton-tabs">{block.config.tabs.map((tab) => <span className="public-loading-shape" key={tab.id} />)}</div>{block.config.layout === "table" ? <SkeletonRows count={block.config.limit} /> : <SkeletonCards count={block.config.limit} columns={3} />}</>;
-    case "divider":
-      return <div className={`article-divider ${block.config.style}`} />;
-    case "spacer":
-      return <div className={`spacer-block size-${block.config.size}`} />;
-  }
 }
 
 function StatisticsBlock({
@@ -578,9 +419,23 @@ function BlockHeading({ title, description }: { title: string; description: stri
 }
 
 function PersonnelBlock({ config }: { config: BlockConfigMap["personnel"] }) {
-  const units = readUnits().filter((unit) => unit.status === "published" && (!config.unitId || unit.id === config.unitId));
-  const people = units.flatMap((unit) => unit.personnel.map((person) => ({ ...person, unitName: unit.shortName || unit.name }))).slice(0, config.limit);
-  return <div className="personnel-block"><BlockHeading title={config.title} description={config.description}/><div className={`personnel-block-grid columns-${config.columns}`}>{people.map((person) => <article key={`${person.unitName}-${person.id}`}><div className="personnel-block-photo" style={person.mediaId ? { ...mediaPreviewStyle(displayMediaFor(person)), backgroundPosition: `${person.photoFocus.x}% ${person.photoFocus.y}%`, backgroundSize: `${person.photoFocus.zoom ?? 100}% auto` } : undefined}>{!person.mediaId ? <Users size={32}/> : null}</div><div><h3>{person.name}</h3><p>{person.position}</p>{person.expertise ? <small>{person.expertise}</small> : null}<span>{person.unitName}</span></div></article>)}</div>{!people.length ? <p className="structured-block-empty">ยังไม่มีข้อมูลบุคลากร</p> : null}</div>;
+  const [people, setPeople] = useState<Array<import("@/features/units/demo/model").UnitPersonnel & { unitName: string }>>([]);
+  const requestKey = JSON.stringify([config.limit, config.unitId]);
+  const [settled, setSettled] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ limit: String(config.limit) });
+    if (config.unitId) params.set("unit", config.unitId);
+    void fetch(`/api/units/public-personnel?${params}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error(); return await response.json() as typeof people; })
+      .then((items) => { if (!controller.signal.aborted) { setPeople(items); setFailed(false); setSettled(requestKey); } })
+      .catch(() => { if (!controller.signal.aborted) { setFailed(true); setSettled(requestKey); } });
+    return () => controller.abort();
+  }, [config.limit, config.unitId, requestKey]);
+  if (settled !== requestKey) return <div className="personnel-block"><BlockHeading title={config.title} description={config.description}/><ContentDataSkeleton kind="personnel" count={config.limit} columns={config.columns}/></div>;
+  if (failed) return <p role="alert">โหลดข้อมูลบุคลากรไม่สำเร็จ กรุณาลองเปิดหน้าอีกครั้ง</p>;
+  return <div className="personnel-block"><BlockHeading title={config.title} description={config.description}/><div className={`personnel-block-grid columns-${config.columns}`}>{people.map((person) => <article key={`${person.unitName}-${person.id}`}><div className="personnel-block-photo" style={person.mediaId ? { ...mediaPreviewStyle(displayMediaFor(person)), backgroundPosition: `${person.photoFocus.x}% ${person.photoFocus.y}%`, backgroundSize: `${person.photoFocus.zoom ?? 100}% auto` } : undefined}><PublicImageLoading src={displayMediaFor(person)?.previewUrl}/>{!person.mediaId ? <Users size={32}/> : null}</div><div><h3>{person.name}</h3><p>{person.position}</p>{person.expertise ? <small>{person.expertise}</small> : null}<span>{person.unitName}</span></div></article>)}</div>{!people.length ? <p className="structured-block-empty">ยังไม่มีข้อมูลบุคลากร</p> : null}</div>;
 }
 
 function ProcessStepsBlock({ config }: { config: BlockConfigMap["processSteps"] }) {
@@ -614,7 +469,7 @@ function MapBlock({ config }: { config: BlockConfigMap["map"] }) {
   }, [url]);
   const current = mapResult?.sourceUrl === url ? mapResult : null;
   const loading = Boolean(url && !current);
-  return <div className="map-block"><BlockHeading title={config.title} description={config.description}/>{current?.embedUrl ? <iframe className={`height-${config.height}`} src={current.embedUrl} title={config.title || "แผนที่"} loading="lazy" referrerPolicy="no-referrer-when-downgrade"/> : <div className={`map-block-placeholder height-${config.height}`}><MapPin size={30}/><span>{loading ? "กำลังโหลดแผนที่..." : url ? "ไม่สามารถแสดงแผนที่จากลิงก์นี้ได้" : "เพิ่มลิงก์แชร์ Google Maps ในการตั้งค่าบล็อก"}</span></div>}{url ? <a href={current?.externalUrl ?? url} target="_blank" rel="noreferrer">เปิดใน Google Maps <ExternalLink size={15}/></a> : null}</div>;
+  return <div className="map-block"><BlockHeading title={config.title} description={config.description}/>{current?.embedUrl ? <PublicEmbed className={`height-${config.height}`} src={current.embedUrl} externalUrl={current.externalUrl} title={config.title || "แผนที่"} loading="lazy" referrerPolicy="no-referrer-when-downgrade"/> : <div className={`map-block-placeholder height-${config.height}${loading ? " public-loading-shape" : ""}`}><MapPin size={30}/><span>{loading ? "กำลังโหลดแผนที่..." : url ? "ไม่สามารถแสดงแผนที่จากลิงก์นี้ได้" : "เพิ่มลิงก์แชร์ Google Maps ในการตั้งค่าบล็อก"}</span></div>}{url ? <a href={current?.externalUrl ?? url} target="_blank" rel="noreferrer">เปิดใน Google Maps <ExternalLink size={15}/></a> : null}</div>;
 }
 
 function TimelineBlock({ config }: { config: BlockConfigMap["timeline"] }) {
@@ -742,6 +597,7 @@ function MediaVisual({
       role="img"
       aria-label={alt || media?.alt || "ยังไม่ได้เลือกรูปภาพ"}
     >
+      <PublicImageLoading src={media?.previewUrl}/>
       {media ? null : <span>เลือกรูปภาพ</span>}
     </div>
   );
@@ -805,8 +661,9 @@ function MediaFigure({
         {preserveNaturalRatio && media?.previewUrl ? <>
           {/* Intrinsic dimensions are required here so image-only blocks preserve the uploaded file's natural ratio. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={media.previewUrl} alt={alt || media.name} />
+          <img src={media.previewUrl} alt={alt || media.name} width={dimensions ? Number(dimensions[1]) : undefined} height={dimensions ? Number(dimensions[2]) : undefined} />
         </> : media?.previewUrl ? <span className="block-image-crop-layer" style={{ ...mediaPreviewStyle(media), backgroundSize: fit, backgroundPosition: `${focalPoint.x}% ${focalPoint.y}%`, transform: fit === "cover" ? `scale(${zoom / 100})` : undefined, transformOrigin: `${focalPoint.x}% ${focalPoint.y}%` }} aria-hidden="true" /> : null}
+        <PublicImageLoading src={media?.previewUrl}/>
         <MediaInteractionOverlay
           interaction={interaction}
           media={media}
@@ -822,10 +679,10 @@ function ServiceGroups({ config }: { config: BlockConfigMap["serviceGroups"] }) 
   const resolveTarget = useLinkTargetResolver();
   return <section className="service-groups-block">
     <header><h2>{config.title}</h2>{config.description ? <p>{config.description}</p> : null}</header>
-    <div className={`service-groups-grid columns-${config.columns}`}>
+    <div className="service-groups-grid columns-3">
       {config.groups.map((group) => {
         return <article className={`service-group-card accent-${group.accent}`} key={group.id}>
-          <div className="service-group-title"><span><NavigationIcon name={group.icon} size={23}/></span><h3>{group.title}</h3></div>
+          <div className="service-group-title">{group.icon ? <span><NavigationIcon name={group.icon} size={23}/></span> : null}<h3>{group.title}</h3></div>
           <div className="service-group-links">
             {group.items.map((item) => <a href={resolveTarget(item.target)} target={item.openInNewTab ? "_blank" : undefined} rel={item.openInNewTab ? "noopener noreferrer" : undefined} key={item.id}><span><ArrowRight aria-hidden/></span>{item.label}</a>)}
           </div>
@@ -842,8 +699,9 @@ function VideoEmbed({ url, title }: { url: string; title: string }) {
     /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/,
   );
   return match ? (
-    <iframe
+    <PublicEmbed
       src={`https://www.youtube-nocookie.com/embed/${match[1]}`}
+      externalUrl={`https://www.youtube.com/watch?v=${match[1]}`}
       title={title || "วิดีโอ"}
       loading="lazy"
       allowFullScreen
@@ -873,7 +731,7 @@ function IframeEmbed({
         <span>รองรับเฉพาะที่อยู่เว็บไซต์แบบ http หรือ https</span>
       </div>
       ) : <div className={`iframe-block iframe-height-${config.height}`}>
-      <iframe
+      <PublicEmbed
         src={src}
         title={config.title || "เนื้อหาจากเว็บไซต์ภายนอก"}
         loading="lazy"

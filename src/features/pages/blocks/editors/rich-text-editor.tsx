@@ -2,6 +2,7 @@
 
 import "./rich-text-editor.css";
 import { AnchoredSelect } from "@/components/ui/anchored-select";
+import { scrollIsInsideMenu } from "@/components/ui/dropdown-scroll";
 
 import type { Editor } from "@tiptap/core";
 import type { EditorStateSnapshot, JSONContent } from "@tiptap/react";
@@ -14,10 +15,10 @@ import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import TextAlign from "@tiptap/extension-text-align";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Ban, ChevronDown, Code, CodeXml, Columns3, Eraser, Highlighter, ImagePlus, ListChecks, Minus, Pilcrow, Plus, Rows3, Table2, Trash2, WrapText } from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Ban, ChevronDown, Code, CodeXml, Columns3, Eraser, Highlighter, ImagePlus, Minus, Pilcrow, Plus, Rows3, Table2, Trash2, WrapText } from "lucide-react";
 import { Bold, FileText, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Quote, Redo2, Strikethrough, Underline, Undo2, Unlink, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { readPageSummaries } from "@/features/pages/demo/page-list-storage";
 import { readUnits } from "@/features/units/demo/storage";
 import { MediaPicker } from "@/features/media/components/media-picker";
@@ -92,7 +93,7 @@ function readInternalLinks(): InternalLinkOption[] {
   ];
 }
 
-export function RichTextEditor({ value, onChange, compact = false }: { value: JSONContent; onChange: (value: JSONContent) => void; compact?: boolean }) {
+export function RichTextEditor({ value, onChange, compact = false, announcementStyle = false, newsForm = false }: { value: JSONContent; onChange: (value: JSONContent) => void; compact?: boolean; announcementStyle?: boolean; newsForm?: boolean }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkKind, setLinkKind] = useState<LinkKind>("internal");
   const [internalLinks, setInternalLinks] = useState<InternalLinkOption[]>(systemLinks);
@@ -223,9 +224,9 @@ export function RichTextEditor({ value, onChange, compact = false }: { value: JS
     modalRoot,
   ) : null;
 
-  return <div className={`tiptap-editor tiptap-simple-editor${compact ? " is-compact" : ""}`}>
-    <MenuBar editor={editor} linkOpen={linkOpen} onOpenLink={openLinkEditor} onOpenImage={() => setImagePickerOpen(true)} compact={compact} />
-    <EditorContent editor={editor} />
+  return <div className={`tiptap-editor tiptap-simple-editor${compact ? " is-compact" : ""}${announcementStyle ? " is-announcement-style" : ""}${newsForm ? " is-news-form" : ""}`}>
+    <MenuBar editor={editor} linkOpen={linkOpen} onOpenLink={openLinkEditor} onOpenImage={() => setImagePickerOpen(true)} compact={compact} announcementStyle={announcementStyle} newsForm={newsForm} />
+    <EditorContent editor={editor} className="tiptap-edit-area" />
     {linkModal}
     {mediaPickerOpen && modalRoot ? createPortal(
       <MediaPicker
@@ -283,7 +284,6 @@ function menuBarStateSelector({ editor }: EditorStateSnapshot<Editor>) {
     headingLevel: editor.isActive("heading") ? Number(editor.getAttributes("heading").level) : null,
     isBulletList: editor.isActive("bulletList"),
     isOrderedList: editor.isActive("orderedList"),
-    isTaskList: editor.isActive("taskList"),
     isBlockquote: editor.isActive("blockquote"),
     isCodeBlock: editor.isActive("codeBlock"),
     canAddColumnBefore: editor.can().addColumnBefore(),
@@ -306,7 +306,7 @@ function menuBarStateSelector({ editor }: EditorStateSnapshot<Editor>) {
   };
 }
 
-function MenuBar({ editor, linkOpen, onOpenLink, onOpenImage, compact = false }: { editor: Editor; linkOpen: boolean; onOpenLink: () => void; onOpenImage: () => void; compact?: boolean }) {
+function MenuBar({ editor, linkOpen, onOpenLink, onOpenImage, compact = false, announcementStyle = false, newsForm = false }: { editor: Editor; linkOpen: boolean; onOpenLink: () => void; onOpenImage: () => void; compact?: boolean; announcementStyle?: boolean; newsForm?: boolean }) {
   const state = useEditorState({ editor, selector: menuBarStateSelector });
   function insertTable() {
     editor.chain().focus().command(({ tr }) => {
@@ -338,6 +338,28 @@ function MenuBar({ editor, linkOpen, onOpenLink, onOpenImage, compact = false }:
       : state.textAlign === "justify"
         ? <AlignJustify />
         : <AlignLeft />;
+  if (newsForm) return <div className="tiptap-toolbar" role="toolbar" aria-label="เครื่องมือจัดรูปแบบเนื้อหาข่าว" tabIndex={0}>
+    <Tool label="ย้อนกลับ" disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}><Undo2 /></Tool>
+    <Tool label="ทำซ้ำ" disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}><Redo2 /></Tool>
+    <i aria-hidden="true" />
+    <Tool label="ตัวหนา" active={state.isBold} disabled={!state.canBold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold /></Tool>
+    <Tool label="รายการหัวข้อย่อย" active={state.isBulletList} onClick={() => editor.chain().focus().toggleBulletList().run()}><List /></Tool>
+    <Tool label="รายการลำดับเลข" active={state.isOrderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered /></Tool>
+    <i aria-hidden="true" />
+    <Tool label="เพิ่มหรือแก้ไขลิงก์" active={state.isLink || linkOpen} onClick={onOpenLink}><Link2 /></Tool>
+    <Tool label="นำลิงก์ออก" disabled={!state.isLink} onClick={() => editor.chain().focus().unsetLink().run()}><Unlink /></Tool>
+    <Tool label="แทรกรูปภาพจากคลังสื่อ" onClick={onOpenImage}><ImagePlus /></Tool>
+  </div>;
+  if (announcementStyle) return <div className="tiptap-toolbar" role="toolbar" aria-label="จัดรูปแบบข้อความ" tabIndex={0}>
+    <Tool label="ตัวหนา" active={state.isBold} disabled={!state.canBold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold /></Tool>
+    <Tool label="ตัวเอียง" active={state.isItalic} disabled={!state.canItalic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic /></Tool>
+    <i aria-hidden="true" />
+    <Tool label="รายการหัวข้อย่อย" active={state.isBulletList} onClick={() => editor.chain().focus().toggleBulletList().run()}><List /></Tool>
+    <Tool label="รายการลำดับเลข" active={state.isOrderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered /></Tool>
+    <i aria-hidden="true" />
+    <Tool label="เพิ่มหรือแก้ไขลิงก์" active={state.isLink || linkOpen} onClick={onOpenLink}><Link2 /></Tool>
+    <Tool label="นำลิงก์ออก" disabled={!state.isLink} onClick={() => editor.chain().focus().unsetLink().run()}><Unlink /></Tool>
+  </div>;
   if (compact) return <div className="tiptap-toolbar" role="toolbar" aria-label="เครื่องมือจัดรูปแบบเนื้อหาแบบย่อ" tabIndex={0}>
     <ToolbarMenu label="รูปแบบข้อความ" icon={<span className="tiptap-format-label">{state.headingLevel ? `หัวข้อ H${state.headingLevel}` : "ข้อความปกติ"}</span>} className="text-format-menu">
       <MenuTool label="ข้อความปกติ" active={!state.headingLevel} onClick={() => editor.chain().focus().setParagraph().run()}><Pilcrow /></MenuTool>
@@ -353,9 +375,7 @@ function MenuBar({ editor, linkOpen, onOpenLink, onOpenImage, compact = false }:
     <Tool label="เพิ่มหรือแก้ไขลิงก์" active={state.isLink || linkOpen} onClick={onOpenLink}><Link2 /></Tool>
     <Tool label="นำลิงก์ออก" disabled={!state.isLink} onClick={() => editor.chain().focus().unsetLink().run()}><Unlink /></Tool>
   </div>;
-  return <div className="tiptap-toolbar" role="toolbar" aria-label="เครื่องมือจัดรูปแบบข้อความ เลื่อนแนวนอนเพื่อดูเครื่องมือเพิ่มเติม" tabIndex={0} onScroll={(event) => {
-    event.currentTarget.querySelectorAll<HTMLDetailsElement>(".tiptap-tool-menu[open]").forEach((details) => details.removeAttribute("open"));
-  }}>
+  return <div className="tiptap-toolbar" role="toolbar" aria-label="เครื่องมือจัดรูปแบบข้อความ เลื่อนแนวนอนเพื่อดูเครื่องมือเพิ่มเติม" tabIndex={0}>
     <Tool label="ย้อนกลับ" disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}><Undo2 /></Tool>
     <Tool label="ทำซ้ำ" disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}><Redo2 /></Tool>
     <i aria-hidden="true" />
@@ -379,10 +399,9 @@ function MenuBar({ editor, linkOpen, onOpenLink, onOpenImage, compact = false }:
       <MenuTool label="ล้างรูปแบบย่อหน้า" disabled={!state.canClearNodes} onClick={() => editor.chain().focus().clearNodes().run()}><Pilcrow /></MenuTool>
     </ToolbarMenu>
     <i aria-hidden="true" />
-    <ToolbarMenu label="รายการ" icon={state.isOrderedList ? <ListOrdered /> : state.isTaskList ? <ListChecks /> : <List />} active={state.isBulletList || state.isOrderedList || state.isTaskList}>
+    <ToolbarMenu label="รายการ" icon={state.isOrderedList ? <ListOrdered /> : <List />} active={state.isBulletList || state.isOrderedList}>
       <MenuTool label="รายการหัวข้อย่อย" active={state.isBulletList} onClick={() => editor.chain().focus().toggleBulletList().run()}><List /></MenuTool>
       <MenuTool label="รายการลำดับเลข" active={state.isOrderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered /></MenuTool>
-      <MenuTool label="รายการตรวจสอบ" active={state.isTaskList} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks /></MenuTool>
     </ToolbarMenu>
     <i aria-hidden="true" />
     <Tool label="ลดย่อหน้า" disabled={!state.paragraph || state.indent === 0} onClick={() => editor.chain().focus().updateAttributes("paragraph", { indent: Math.max(0, state.indent - 1) }).run()}><IndentDecrease /></Tool>
@@ -441,21 +460,97 @@ function Tool({ label, active = false, disabled = false, onClick, children }: { 
 function ToolbarMenu({ label, icon, active = false, align = "left", hideChevron = false, className = "", children }: { label: string; icon: ReactNode; active?: boolean; align?: "left" | "right"; hideChevron?: boolean; className?: string; children: ReactNode }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
+  const positionMenu = useCallback((details: HTMLDetailsElement) => {
+    const popover = details.querySelector<HTMLElement>(".tiptap-tool-menu-popover");
+    if (!popover) return;
+    const trigger = details.getBoundingClientRect();
+    const saveBar = details.closest(".news-editor")?.querySelector<HTMLElement>(".news-save-bar");
+    const bottomLimit = Math.min(window.innerHeight - 12, saveBar?.getBoundingClientRect().top ?? Infinity);
+    const roomBelow = Math.max(0, bottomLimit - trigger.bottom - 7);
+    const roomAbove = Math.max(0, trigger.top - 12);
+    const menuHeight = Math.min(460, popover.scrollHeight);
+    const openAbove = roomBelow < Math.min(menuHeight, 180) && roomAbove > roomBelow;
+    const availableHeight = openAbove ? roomAbove : roomBelow;
+    popover.style.maxHeight = `${Math.min(460, availableHeight)}px`;
+    const compactToolbar = Boolean(details.closest(".tiptap-simple-editor.is-compact"));
+    if (compactToolbar || details.closest(".builder-block-preview.inline-rich-text, .article-block-preview.inline-rich-text") || window.matchMedia("(max-width: 900px)").matches) {
+      popover.style.position = "fixed";
+      popover.style.right = "auto";
+      popover.style.bottom = "auto";
+      const width = popover.offsetWidth;
+      const left = details.classList.contains("align-right") ? trigger.right - width : trigger.left;
+      popover.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+      const visibleHeight = Math.min(popover.offsetHeight, availableHeight);
+      popover.style.top = `${openAbove ? Math.max(8, trigger.top - visibleHeight - 7) : trigger.bottom + 7}px`;
+    } else {
+      popover.style.position = "";
+      popover.style.left = "";
+      popover.style.right = "";
+      popover.style.top = openAbove ? "auto" : "";
+      popover.style.bottom = openAbove ? "calc(100% + 7px)" : "";
+    }
+  }, []);
+
+  const syncTopLayer = useCallback((details: HTMLDetailsElement) => {
+    const popover = details.querySelector<HTMLElement>(".tiptap-tool-menu-popover");
+    if (!popover || typeof popover.showPopover !== "function") return;
+    const useTopLayer = details.open && window.matchMedia("(max-width: 900px)").matches;
+    if (useTopLayer) {
+      popover.setAttribute("popover", "manual");
+      if (!popover.matches(":popover-open")) popover.showPopover();
+    } else if (popover.hasAttribute("popover")) {
+      if (popover.matches(":popover-open")) popover.hidePopover();
+      popover.removeAttribute("popover");
+    }
+  }, []);
+
   useEffect(() => {
-    const closeWhenOutside = (event: PointerEvent) => {
+    const isInsideBlock = (target: EventTarget | null) => {
+      const details = detailsRef.current;
+      const block = details?.closest(".builder-block, .article-block-list > article") ?? details?.closest(".tiptap-simple-editor");
+      return target instanceof Node && Boolean(block?.contains(target));
+    };
+    const closeWhenOutside = (event: MouseEvent) => {
       const details = detailsRef.current;
       if (details?.open && !details.contains(event.target as Node)) details.removeAttribute("open");
     };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (detailsRef.current?.open && !isInsideBlock(event.target)) detailsRef.current.removeAttribute("open");
+    };
+    const closeWhenScrollingOutside = (event: WheelEvent | TouchEvent) => {
+      const details = detailsRef.current;
+      if (details?.open && !isInsideBlock(event.target)) details.removeAttribute("open");
+    };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") detailsRef.current?.removeAttribute("open");
+      if (["PageDown", "PageUp", "Home", "End", "ArrowUp", "ArrowDown", " "].includes(event.key) && !isInsideBlock(event.target)) detailsRef.current?.removeAttribute("open");
     };
-    document.addEventListener("pointerdown", closeWhenOutside);
+    document.addEventListener("click", closeWhenOutside);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
     document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeWhenOutside);
-      document.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("wheel", closeWhenScrollingOutside, true);
+    document.addEventListener("touchmove", closeWhenScrollingOutside, true);
+    const repositionOnExternalScroll = (event: Event) => {
+      const details = detailsRef.current;
+      if (details?.open && !scrollIsInsideMenu(event, details.querySelector(".tiptap-tool-menu-popover"))) positionMenu(details);
     };
-  }, []);
+    const reposition = () => {
+      if (!detailsRef.current?.open) return;
+      syncTopLayer(detailsRef.current);
+      positionMenu(detailsRef.current);
+    };
+    window.addEventListener("scroll", repositionOnExternalScroll, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("click", closeWhenOutside);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("wheel", closeWhenScrollingOutside, true);
+      document.removeEventListener("touchmove", closeWhenScrollingOutside, true);
+      window.removeEventListener("scroll", repositionOnExternalScroll, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [positionMenu, syncTopLayer]);
 
   function closeSiblingMenus() {
     const current = detailsRef.current;
@@ -467,34 +562,10 @@ function ToolbarMenu({ label, icon, active = false, align = "left", hideChevron 
   }
 
   return <details ref={detailsRef} className={`tiptap-tool-menu ${align === "right" ? "align-right" : ""} ${hideChevron ? "no-chevron" : ""} ${className}`} onToggle={(event) => {
-    if (!event.currentTarget.open) return;
-    closeSiblingMenus();
-    const details = event.currentTarget;
-    const popover = details.querySelector<HTMLElement>(".tiptap-tool-menu-popover");
-    if (!popover) return;
-    const trigger = details.getBoundingClientRect();
-    const saveBar = details.closest(".news-editor")?.querySelector<HTMLElement>(".news-save-bar");
-    const bottomLimit = Math.min(window.innerHeight - 12, saveBar?.getBoundingClientRect().top ?? Infinity);
-    const roomBelow = bottomLimit - trigger.bottom - 7;
-    const roomAbove = trigger.top - 12;
-    const openAbove = roomBelow < 180 && roomAbove > roomBelow;
-    popover.style.maxHeight = `${Math.max(80, Math.min(460, openAbove ? roomAbove : roomBelow))}px`;
-    const compactToolbar = Boolean(details.closest(".tiptap-simple-editor.is-compact"));
-    if (compactToolbar || window.matchMedia("(max-width: 900px)").matches) {
-      popover.style.position = "fixed";
-      popover.style.right = "auto";
-      popover.style.bottom = "auto";
-      const width = popover.offsetWidth;
-      const left = details.classList.contains("align-right") ? trigger.right - width : trigger.left;
-      popover.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
-      popover.style.top = `${openAbove ? Math.max(8, trigger.top - popover.offsetHeight - 7) : trigger.bottom + 7}px`;
-    } else {
-      popover.style.position = "";
-      popover.style.left = "";
-      popover.style.right = "";
-      popover.style.top = openAbove ? "auto" : "";
-      popover.style.bottom = openAbove ? "calc(100% + 7px)" : "";
-    }
+    if (event.target !== event.currentTarget) return;
+    if (event.currentTarget.open) closeSiblingMenus();
+    syncTopLayer(event.currentTarget);
+    if (event.currentTarget.open) positionMenu(event.currentTarget);
   }}>
     <summary className={active ? "active" : ""} title={label} aria-label={label}>
       {icon}{hideChevron ? null : <ChevronDown className="tiptap-tool-menu-chevron" />}

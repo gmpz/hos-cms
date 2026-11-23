@@ -7,6 +7,7 @@ import { PublishDropdown } from "@/components/admin/publish-dropdown";
 import { NativeSelect } from "@/components/ui/native-select";
 import { ConfirmDialog as SystemConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AnchoredSelect } from "@/components/ui/anchored-select";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import {
   DragDropContext,
   Draggable,
@@ -90,6 +91,7 @@ import {
   type ReactNode,
   type PointerEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { moduleRouteCatalog, selectableModuleRoutes } from "@/features/navigation/module-routes";
 import { navigationIconNames, type NavigationIconName } from "@/features/navigation/icon-names";
@@ -207,7 +209,7 @@ const blockIcons = {
   spacer: MoveVertical,
 } satisfies Record<BuilderKind, typeof Type>;
 const viewports = {
-  desktop: "1440px",
+  desktop: "1280px",
   tablet: "768px",
   mobile: "390px",
 } as const;
@@ -268,6 +270,8 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
   const [confirm, setConfirm] = useState<"publish" | "unpublish" | "leave" | "delete" | "discard" | null>(
     null,
   );
+  const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null);
+  const allowLeaveRef = useRef(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const setToast = showGlobalToast;
   const settingsBlock =
@@ -559,16 +563,67 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
     }
   }
   function goBack() {
-    if (hasChanges) setConfirm("leave");
-    else router.push("/admin/pages");
+    if (hasChanges) {
+      setPendingLeaveHref(new URL("/admin/pages", window.location.origin).href);
+      setConfirm("leave");
+    } else router.push("/admin/pages");
+  }
+
+  function leaveWithoutSaving() {
+    if (!pendingLeaveHref) return;
+    const destination = new URL(pendingLeaveHref);
+    const snapshot = JSON.parse(savedSnapshot) as { page: DemoPage; accessLevel: AccessLevel; accessGrants: AccessGrants };
+    allowLeaveRef.current = true;
+    flushSync(() => {
+      setPage(snapshot.page);
+      setAccessLevel(snapshot.accessLevel);
+      setAccessGrants(snapshot.accessGrants);
+      setPast([]);
+      setFuture([]);
+      setSelected(null);
+      setSettingsBlockId(null);
+      setPageSettingsOpen(false);
+      setSaveState("saved");
+      setConfirm(null);
+      setPendingLeaveHref(null);
+    });
+    window.location.assign(destination.href);
   }
 
   useEffect(() => {
+    const reloadRestoredPage = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", reloadRestoredPage);
+    return () => window.removeEventListener("pageshow", reloadRestoredPage);
+  }, []);
+
+  useEffect(() => {
+    if (!hasChanges) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (hasChanges) event.preventDefault();
+      if (allowLeaveRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const interceptLink = (event: MouseEvent) => {
+      if (allowLeaveRef.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("download") || (anchor.getAttribute("target") && anchor.getAttribute("target") !== "_self")) return;
+      const destination = new URL(anchor.href, window.location.href);
+      if ((destination.protocol !== "http:" && destination.protocol !== "https:") || destination.href === window.location.href) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingLeaveHref(destination.href);
+      setConfirm("leave");
     };
     window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", interceptLink, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", interceptLink, true);
+    };
   }, [hasChanges]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -921,8 +976,8 @@ function Builder({ pageId, initialPage, initialPublishedPage, summary, initialAc
             title="มีการแก้ไขที่ยังไม่ได้บันทึก"
             description="หากออกจากหน้านี้ การแก้ไขล่าสุดจะหายไป"
             confirmLabel="ออกโดยไม่บันทึก"
-            onClose={() => setConfirm(null)}
-            onConfirm={() => router.push("/admin/pages")}
+            onClose={() => { setConfirm(null); setPendingLeaveHref(null); }}
+            onConfirm={leaveWithoutSaving}
           /> : null}
         </div>
       </DragDropContext>
@@ -1849,8 +1904,8 @@ function ImageBlockSettings({
           value={block.config.mode}
           onChange={(mode) => onChange({ ...block, config: { ...block.config, mode } })}
           options={[
-            { value: "image", label: "รูปภาพอย่างเดียว", icon: <ImageIcon size={22}/> },
-            { value: "imageText", label: "รูปภาพและข้อความ", icon: <Columns2 size={22}/> },
+            { value: "image", label: "รูปภาพ", icon: <ImageIcon size={22}/> },
+            { value: "imageText", label: "รูปภาพ/ข้อความ", icon: <Columns2 size={22}/> },
           ]}
         />
       </div>
@@ -1870,6 +1925,7 @@ function ImageBlockSettings({
       <Field label={block.config.mode === "imageText" ? "เนื้อหา" : "คำอธิบาย"}>
         {block.config.mode === "imageText" ? <SecondaryRichTextEditor
           value={block.config.description}
+          announcementStyle
           onChange={(description) => onChange({ ...block, config: { ...block.config, description } })}
           compact
         /> : <textarea
@@ -2008,6 +2064,7 @@ function ImageTextSettings({
       <Field label="เนื้อหา">
         <SecondaryRichTextEditor
           value={block.config.body}
+          announcementStyle
           onChange={(body) =>
             onChange({
               ...block,
@@ -2517,19 +2574,13 @@ function ServiceGroupsSettings({ block, onChange }: {
   return <>
     <Field label="หัวข้อใหญ่"><input value={config.title} onChange={(event) => patch({ title: event.target.value })} /></Field>
     <Field label="คำอธิบาย"><textarea rows={3} value={config.description} placeholder="เพิ่มคำอธิบายสั้น ๆ ของเมนูบริการ" onChange={(event) => patch({ description: event.target.value })} /></Field>
-    <div className="block-display-settings service-columns-settings">
-      <IconChoiceField label="จำนวนคอลัมน์" value={String(config.columns) as "2" | "3"} onChange={(columns) => patch({ columns: Number(columns) as 2 | 3 })} options={[
-        { value: "2", label: "2 คอลัมน์", caption: "2 คอลัมน์", icon: <Columns2 size={22}/> },
-        { value: "3", label: "3 คอลัมน์", caption: "3 คอลัมน์", icon: <Columns3 size={22}/> },
-      ]}/>
-    </div>
     <div className="service-group-settings">
       <div className="slider-settings-bar"><strong>หมวดบริการ ({config.groups.length}/6)</strong><button type="button" disabled={config.groups.length >= 6} onClick={() => patch({ groups: [...config.groups, { id: createId(), title: "หมวดบริการใหม่", icon: "heart-pulse", accent: "primary", items: [] }] })}><Plus size={13}/>เพิ่มหมวด</button></div>
       {config.groups.map((group, groupIndex) => <details key={group.id}>
         <summary><span>หมวด {groupIndex + 1}</span><span>{group.title}</span><ChevronDown size={15}/></summary>
         <div className="service-group-settings-body">
           <Field label="ชื่อหมวด"><input value={group.title} onChange={(event) => updateGroup(group.id, { title: event.target.value })}/></Field>
-          <ServiceGroupIconPicker value={group.icon} onChange={(icon) => updateGroup(group.id, { icon })}/>
+          <ServiceGroupIconPicker value={group.icon} allowNone onChange={(icon) => updateGroup(group.id, { icon })}/>
           <div className="block-display-settings service-accent-settings">
             <IconChoiceField className="service-accent-choice" label="สีขอบและไอคอน" value={group.accent} onChange={(accent) => updateGroup(group.id, { accent })} options={[
               { value: "primary", label: "สีหลัก", caption: "สีหลัก", icon: <span className="block-accent-icon primary"/> },
@@ -2570,22 +2621,31 @@ function ServiceGroupsSettings({ block, onChange }: {
   </>;
 }
 
-function ServiceGroupIconPicker({ value, onChange, ariaLabel = "เลือกไอคอนหมวดบริการ" }: { value: NavigationIconName; onChange: (value: NavigationIconName) => void; ariaLabel?: string }) {
+function ServiceGroupIconPicker({ value, onChange, allowNone = false, ariaLabel = "เลือกไอคอนหมวดบริการ" }: { value: NavigationIconName | null; onChange: (value: NavigationIconName | null) => void; allowNone?: boolean; ariaLabel?: string }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const closeOutside = (event: globalThis.PointerEvent) => {
       if (event.target instanceof Node && !detailsRef.current?.contains(event.target)) detailsRef.current?.removeAttribute("open");
     };
     document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
+    const stopDismissal = listenForDropdownDismissal(
+      () => detailsRef.current?.querySelector(".navigation-icon-grid"),
+      (target) => target instanceof Node && Boolean(detailsRef.current?.contains(target)),
+      () => detailsRef.current?.removeAttribute("open"),
+    );
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      stopDismissal();
+    };
   }, []);
   return <div className="navigation-icon-field service-group-icon-field">
     <span>ไอคอน</span>
     <details ref={detailsRef} className="navigation-icon-picker" onKeyDown={(event) => {
       if (event.key === "Escape") { detailsRef.current?.removeAttribute("open"); detailsRef.current?.querySelector("summary")?.focus(); }
     }}>
-      <summary><span><NavigationIcon name={value} size={18}/>{navigationIcons[value].label}</span><ChevronDown size={17}/></summary>
+      <summary><span>{value ? <NavigationIcon name={value} size={18}/> : <X size={18}/>}{value ? navigationIcons[value].label : "ไม่มี"}</span><ChevronDown size={17}/></summary>
       <div className="navigation-icon-grid" aria-label={ariaLabel}>
+        {allowNone ? <button type="button" className={value === null ? "selected" : ""} aria-label="ไม่มีไอคอน" aria-pressed={value === null} title="ไม่มีไอคอน" onClick={() => { onChange(null); detailsRef.current?.removeAttribute("open"); }}><X size={21}/><small>ไม่มี</small></button> : null}
         {navigationIconNames.map((name) => <button key={name} type="button" className={value === name ? "selected" : ""} aria-label={navigationIcons[name].label} aria-pressed={value === name} title={navigationIcons[name].label} onClick={() => { onChange(name); detailsRef.current?.removeAttribute("open"); }}><NavigationIcon name={name} size={21}/><small>{navigationIcons[name].label}</small></button>)}
       </div>
     </details>
@@ -2636,18 +2696,6 @@ function LinkCardsSettings({
           value={config.description}
           onChange={(event) => patch({ description: event.target.value })}
         />
-      </Field>
-      <Field label="จำนวนคอลัมน์">
-        <NativeSelect
-          value={config.columns}
-          onChange={(event) =>
-            patch({ columns: Number(event.target.value) as 2 | 3 | 4 })
-          }
-        >
-          <option value={2}>2 คอลัมน์</option>
-          <option value={3}>3 คอลัมน์</option>
-          <option value={4}>4 คอลัมน์</option>
-        </NativeSelect>
       </Field>
       <div className="link-card-settings">
         <div className="slider-settings-bar">
@@ -2744,7 +2792,7 @@ function LinkCardsSettings({
                   item.visual.kind === "icon" ? <ServiceGroupIconPicker
                     value={item.visual.icon}
                     ariaLabel="เลือกไอคอนการ์ดลิงก์"
-                    onChange={(icon) => updateCard(item.id, { ...item, visual: { kind: "icon", icon } })}
+                    onChange={(icon) => { if (icon) updateCard(item.id, { ...item, visual: { kind: "icon", icon } }); }}
                   /> : (
                   media ? <LinkCardImageEditor
                     mediaId={item.visual.mediaId}
@@ -3028,6 +3076,7 @@ function QuoteSettings({ block, onChange }: {
     <Field label="ผู้กล่าวหรือแหล่งที่มา">
       <SecondaryRichTextEditor
         value={block.config.attribution}
+        announcementStyle
         onChange={(attribution) => update({ attribution })}
         compact
       />
@@ -3048,7 +3097,7 @@ function VideoSettings({ block, onChange }: {
     ]}/></div>
     <Field label="URL วิดีโอ"><input value={block.config.url} placeholder="https://www.youtube.com/watch?v=..." onChange={(event) => update({ url: event.target.value })}/></Field>
     <Field label="หัวข้อ Block"><input value={block.config.title} maxLength={160} onChange={(event) => update({ title: event.target.value })}/></Field>
-    <Field label="เนื้อหา"><SecondaryRichTextEditor value={block.config.description} onChange={(description) => update({ description })} compact/></Field>
+    <Field label="เนื้อหา"><textarea rows={4} value={block.config.description} onChange={(event) => update({ description: event.target.value })}/></Field>
     <Field label="คำบรรยายใต้วิดีโอ"><input value={block.config.caption} onChange={(event) => update({ caption: event.target.value })}/></Field>
     {block.config.mode === "videoText" ? <>
       <div className="block-display-settings video-text-split-settings"><IconChoiceField label="สัดส่วนพื้นที่" value={block.config.videoTextSplit} onChange={(videoTextSplit) => update({ videoTextSplit })} options={[
@@ -3362,7 +3411,7 @@ function PostsSettings({
         onChange={(categoryId) => patch({ categoryId })}
       />
       <div className="block-display-settings posts-layout-settings">
-        <IconChoiceField label="รูปแบบการแสดงผล" value={config.layout} onChange={(layout) => patch({ layout })} options={[
+        <IconChoiceField label="รูปแบบการแสดงผล" value={config.layout} onChange={(layout) => patch({ layout, limit: layout === config.layout ? config.limit : layout === "grid" ? 4 : 5 })} options={[
           { value: "grid", label: "แบบตาราง — หลายการ์ดต่อแถว", caption: "แบบตาราง", icon: <LayoutGrid size={21}/> },
           { value: "list", label: "แบบรายการ — หนึ่งรายการต่อแถว", caption: "แบบรายการ", icon: <List size={21}/> },
         ]}/>
@@ -3370,6 +3419,8 @@ function PostsSettings({
       <LimitField
         value={config.limit}
         control="select"
+        label="รายการต่อหน้า"
+        selectOptions={config.layout === "grid" ? [4, 8, 12] : [5, 10]}
         onChange={(limit) => patch({ limit })}
       />
     </>
@@ -3618,6 +3669,8 @@ function DocumentTabsSettings({
         value={config.limit}
         onChange={(limit) => patch({ limit })}
         control="select"
+        label="รายการต่อหน้า"
+        selectOptions={[10, 15, 20]}
       />
       <div className="news-tabs-settings-heading">
         <strong>แท็บเอกสาร ({config.tabs.length}/6)</strong>
@@ -3806,6 +3859,7 @@ function FaqSettings({
               <Field label="คำตอบ">
                 <SecondaryRichTextEditor
                   value={item.answer}
+                  announcementStyle
                   compact
                   onChange={(answer) =>
                     onChange({
@@ -4162,25 +4216,28 @@ function LimitField({
   value,
   onChange,
   control = "number",
+  label = "จำนวนรายการ",
+  selectOptions = [3, 6, 9, 12],
 }: {
   value: number;
   onChange: (value: number) => void;
   control?: "number" | "select";
+  label?: string;
+  selectOptions?: readonly number[];
 }) {
   if (control === "select") {
-    const options = [3, 6, 9, 12];
-    const values = options.includes(value)
-      ? options
-      : [...options, value].sort((left, right) => left - right);
+    const values = selectOptions.includes(value)
+      ? selectOptions
+      : [...selectOptions, value].sort((left, right) => left - right);
     return (
-      <Field label="จำนวนรายการ">
+      <Field label={label}>
         <NativeSelect
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
         >
           {values.map((option) => (
             <option value={option} key={option}>
-              {option} รายการ
+              {option} รายการ{selectOptions.includes(option) ? "" : " (ค่าเดิม)"}
             </option>
           ))}
         </NativeSelect>
@@ -4188,7 +4245,7 @@ function LimitField({
     );
   }
   return (
-    <Field label="จำนวนรายการ">
+    <Field label={label}>
       <input
         type="number"
         min={1}

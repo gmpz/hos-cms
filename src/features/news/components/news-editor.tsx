@@ -515,7 +515,7 @@ export function NewsEditor({ postId }: { postId: string | null }) {
         <div>
           <Link href="/admin/posts">
             <ArrowLeft size={16} />
-            กลับ
+            ย้อนกลับ
           </Link>
           <h1>{postId || post.id !== "new-post" ? "แก้ไขข่าว" : "สร้างข่าว"}</h1>
           <p>ข้อมูลข่าวและเนื้อหาแบบ Block</p>

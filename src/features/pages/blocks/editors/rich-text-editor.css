@@ -1,8 +1,6 @@
 .tiptap-editor.tiptap-simple-editor { overflow:visible; border:1px solid var(--border); border-radius:12px; background:#fff; }
 .tiptap-simple-editor .tiptap-toolbar { position:static; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px; padding:6px 10px; background:#fafafa; border-bottom:1px solid var(--border); border-radius:11px 11px 0 0; }
 .tiptap-simple-editor:focus-within .tiptap-toolbar { position:sticky; }
-.builder-canvas-wrap { --rich-text-sticky-offset:-25px; }
-.builder-block-preview.inline-rich-text .tiptap-simple-editor:focus-within .tiptap-toolbar { top:var(--rich-text-sticky-offset); }
 .tiptap-simple-editor .tiptap-toolbar button { width:34px; height:34px; color:#66717d; border-radius:6px; }
 .tiptap-simple-editor .tiptap-toolbar button.active { color:var(--primary); background:color-mix(in srgb,var(--primary) 10%,white); box-shadow:none; }
 .tiptap-simple-editor .tiptap-toolbar button:hover:not(:disabled) { background:#eaf0f2; box-shadow:none; }
@@ -19,6 +17,8 @@
 .tiptap-simple-editor .tiptap-tool-menu>summary:hover,.tiptap-simple-editor .tiptap-tool-menu[open]>summary,.tiptap-simple-editor .tiptap-tool-menu>summary.active { background:#eaf0f2; color:var(--primary); }
 .tiptap-simple-editor .tiptap-tool-menu-chevron { width:11px!important; height:11px!important; }
 .tiptap-simple-editor .tiptap-tool-menu-popover { position:absolute; left:0; top:calc(100% + 7px); z-index:30; display:grid; min-width:185px; max-height:min(460px,calc(100dvh - 120px)); overflow-y:auto; padding:5px; border:1px solid var(--border); border-radius:9px; background:#fff; box-shadow:0 12px 30px #082e6324; }
+.tiptap-simple-editor .tiptap-tool-menu-popover[popover] { inset:auto; width:auto; height:auto; margin:0; color:inherit; }
+.tiptap-simple-editor .tiptap-tool-menu-popover[popover]:not(:popover-open) { display:none; }
 .tiptap-simple-editor .tiptap-tool-menu.align-right .tiptap-tool-menu-popover { right:0; left:auto; }
 .tiptap-simple-editor .tiptap-tool-menu-popover button { display:flex; align-items:center; justify-content:flex-start; gap:9px; width:100%; height:34px; padding:0 9px; font-size:12px; white-space:nowrap; }
 .tiptap-simple-editor .tiptap-tool-menu-popover button.active { background:color-mix(in srgb,var(--primary) 10%,white); color:var(--primary); }
@@ -31,22 +31,22 @@
 .tiptap-simple-editor .tiptap-content,
 .news-editor .inline-rich-text .tiptap-simple-editor .tiptap-content { box-sizing:border-box; width:100%; max-width:800px; min-height:380px; margin:auto; padding:36px clamp(18px,4vw,56px) 64px; color:var(--foreground); font-size:16px; line-height:1.85; overflow-wrap:anywhere; }
 .tiptap-simple-editor.is-compact { box-sizing:border-box; width:100%; min-width:0; max-width:100%; overflow:hidden; }
-.tiptap-simple-editor.is-compact .tiptap-toolbar { box-sizing:border-box; width:100%; min-width:0; max-width:100%; flex-wrap:nowrap; justify-content:flex-start; overflow-x:auto; overflow-y:hidden; padding:5px 7px; scrollbar-width:none; overscroll-behavior-x:contain; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar { box-sizing:border-box; width:100%; min-width:0; max-width:100%; height:44px; min-height:44px; max-height:44px; flex-wrap:nowrap; justify-content:flex-start; overflow-x:auto; overflow-y:hidden; padding:2px 8px; scrollbar-width:none; overscroll-behavior-x:contain; }
 .tiptap-simple-editor.is-compact .tiptap-toolbar::-webkit-scrollbar { display:none; }
 .tiptap-simple-editor.is-compact .tiptap-toolbar > :is(button,details,i) { flex:none; }
-.tiptap-simple-editor.is-compact .tiptap-toolbar > button { width:32px; height:32px; }
-.tiptap-simple-editor.is-compact .tiptap-tool-menu > summary { height:32px; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar > button { width:34px; height:34px; }
+.tiptap-simple-editor.is-compact .tiptap-tool-menu > summary { height:34px; }
 .tiptap-simple-editor.is-compact .tiptap-tool-menu.text-format-menu > summary { min-width:116px; }
 .tiptap-simple-editor.is-compact .tiptap-content { box-sizing:border-box; width:100%; min-width:0; min-height:120px; max-height:220px; padding:14px; overflow-y:auto; font-size:14px; line-height:1.65; }
 .tiptap-simple-editor.is-compact .tiptap-content :is(h1,h2,h3,h4,h5,h6) { margin-top:1.25rem; margin-bottom:.65rem; }
 .news-editor .inline-rich-text .tiptap-simple-editor .tiptap-content,
 .builder-block-preview.inline-rich-text .tiptap-simple-editor .tiptap-content { min-height:320px; padding:14px 0 0; color:inherit; line-height:1.75; overflow-wrap:normal; }
 .builder-block-preview.inline-rich-text .tiptap-simple-editor .tiptap-content { max-width:none; margin-inline:0; }
-/* Public news card: 1002px border-box minus 40px padding and 1px border on each side = 920px. */
-.news-editor .inline-rich-text .content-block.width-narrow .tiptap-content { max-width:736px; }
-.news-editor .inline-rich-text .content-block.width-standard .tiptap-content { max-width:809.6px; }
-.news-editor .inline-rich-text .content-block.width-wide .tiptap-content { max-width:864.8px; }
-.news-editor .inline-rich-text .content-block.width-full .tiptap-content { max-width:920px; }
+/* Public news article: 1100px border-box minus 40px padding on each side = 1020px. */
+.news-editor .inline-rich-text .content-block.width-narrow .tiptap-content { max-width:720px; }
+.news-editor .inline-rich-text .content-block.width-standard .tiptap-content { max-width:897.6px; }
+.news-editor .inline-rich-text .content-block.width-wide .tiptap-content { max-width:958.8px; }
+.news-editor .inline-rich-text .content-block.width-full .tiptap-content { max-width:1020px; }
 .tiptap-simple-editor .tiptap-content :is(h1,h2,h3,h4,h5,h6) { margin-top:2.5rem; line-height:1.1; text-wrap:pretty; }
 .tiptap-simple-editor .tiptap-content :is(h1,h2) { margin-top:3.5rem; margin-bottom:1.5rem; }
 .tiptap-simple-editor .tiptap-content h1 { font-size:2em; font-weight:600; }
@@ -88,6 +88,93 @@
   .tiptap-simple-editor .tiptap-tool-menu.text-format-menu > summary { min-width:128px; }
   .tiptap-simple-editor .tiptap-tool-menu-popover { z-index:1000; }
 }
-@media(max-width:850px) {
-  .builder-canvas-wrap { --rich-text-sticky-offset:-12px; }
+.tiptap-simple-editor.is-announcement-style { overflow:hidden; border-color:var(--input); border-radius:10px; }
+.tiptap-simple-editor.is-announcement-style:focus-within { border-color:var(--primary); outline:3px solid color-mix(in srgb,var(--primary) 10%,transparent); }
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar,
+.tiptap-simple-editor.is-announcement-style:focus-within .tiptap-toolbar {
+  position:static;
+  height:44px;
+  min-height:44px;
+  max-height:44px;
+  flex-wrap:nowrap;
+  justify-content:flex-start;
+  width:100%;
+  max-width:100%;
+  gap:3px;
+  padding:2px 8px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  border-radius:0;
+  background:#f8fafb;
+}
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar::-webkit-scrollbar { display:none; }
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar > :is(button,i) { flex:none; }
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar > button { display:grid; place-items:center; width:34px; height:34px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--foreground); }
+.admin-shell .tiptap-simple-editor:is(.is-compact,.is-announcement-style) .tiptap-toolbar > button { width:34px!important; min-width:34px!important; height:34px!important; min-height:34px!important; padding:0!important; }
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar > button:is(:hover:not(:disabled),.active) { background:#eaf0f2; color:var(--primary); }
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar > i { width:1px; height:20px; margin-inline:3px; }
+.tiptap-simple-editor.is-announcement-style .tiptap-toolbar svg { width:17px; height:17px; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar .tiptap-tool-menu > summary { height:34px; min-height:34px; }
+.tiptap-simple-editor.is-compact .tiptap-toolbar > button:is(:hover:not(:disabled),.active),
+.tiptap-simple-editor.is-compact .tiptap-toolbar .tiptap-tool-menu > summary:is(:hover,.active),
+.tiptap-simple-editor.is-compact .tiptap-toolbar .tiptap-tool-menu[open] > summary { background:#eaf0f2; color:var(--primary); }
+.tiptap-simple-editor.is-announcement-style .tiptap-content,
+.tiptap-simple-editor.is-announcement-style.is-compact .tiptap-content { height:260px; min-height:260px; max-height:260px; margin:0; padding:14px 16px; overflow-y:auto; color:var(--foreground); font-size:15px; line-height:1.7; }
+.tiptap-simple-editor.is-announcement-style .tiptap-content p { margin:0 0 .7em; }
+.tiptap-simple-editor.is-announcement-style .tiptap-content p:last-child { margin-bottom:0; }
+.tiptap-simple-editor.is-announcement-style .tiptap-content :is(ul,ol) { margin:.4em 0; padding-left:1.5em; }
+.tiptap-simple-editor.is-announcement-style .tiptap-content li p { margin:0; }
+
+/* News editors use the same writing viewport and toolbar controls as Page Builder. */
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-simple-editor .tiptap-toolbar,
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-simple-editor:focus-within .tiptap-toolbar {
+  position:static;
+  top:auto;
+  box-sizing:border-box;
+  height:44px;
+  min-height:44px;
+  max-height:44px;
+  flex-wrap:nowrap;
+  justify-content:flex-start;
+  padding:2px 8px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+}
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar::-webkit-scrollbar { display:none; }
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar > :is(button,details,i) { flex:none; }
+.admin-shell .news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar > button {
+  width:34px!important;
+  min-width:34px!important;
+  height:34px!important;
+  min-height:34px!important;
+  padding:0!important;
+}
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar .tiptap-tool-menu > summary { height:34px; min-height:34px; }
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar > button:is(:hover:not(:disabled),.active),
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar .tiptap-tool-menu > summary:is(:hover,.active),
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar .tiptap-tool-menu[open] > summary {
+  background:#eaf0f2;
+  color:var(--primary);
+  box-shadow:none;
+}
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar > button:focus-visible,
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-toolbar .tiptap-tool-menu > summary:focus-visible {
+  outline:2px solid var(--primary);
+  outline-offset:-2px;
+}
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-edit-area {
+  box-sizing:border-box;
+  height:clamp(320px,55dvh,520px);
+  min-height:320px;
+  max-height:520px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.news-editor :is(.article-block-preview.inline-rich-text,.news-form-panel) .tiptap-content {
+  min-height:100%;
+  height:auto;
+  max-height:none;
+  overflow:visible;
 }

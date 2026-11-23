@@ -4,6 +4,7 @@ import { ChevronDown, KeyRound, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { personnelPhotoPositionStyle } from "@/features/units/components/personnel-photo-position";
 import { logoutAction, publicLogoutAction } from "../actions";
 
@@ -28,11 +29,17 @@ export function AccountMenu({ displayName, variant, photoUrl, photoFocusX = 50, 
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") detailsRef.current?.removeAttribute("open");
     }
+    const stopDismissal = listenForDropdownDismissal(
+      () => detailsRef.current?.querySelector(".account-menu-dropdown"),
+      (target) => target instanceof Node && Boolean(detailsRef.current?.contains(target)),
+      () => detailsRef.current?.removeAttribute("open"),
+    );
     document.addEventListener("pointerdown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
+      stopDismissal();
     };
   }, []);
 

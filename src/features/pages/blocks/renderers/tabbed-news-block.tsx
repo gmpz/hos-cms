@@ -11,7 +11,7 @@ import {
 import type { DemoPost } from "@/features/pages/demo/data";
 import { NewsCoverImage } from "@/features/news/components/news-cover-image";
 import type { BlockConfigMap } from "../config/types";
-import { DynamicBlockSkeleton } from "./dynamic-block-skeleton";
+import { ContentDataSkeleton } from "./content-data-skeleton";
 
 const emptyPosts: DemoPost[] = [];
 
@@ -98,8 +98,7 @@ export function TabbedNewsBlock({
       behavior: "smooth",
     });
   };
-  if (items === undefined && activeId === firstTab?.id && failedKey !== activeKey)
-    return <DynamicBlockSkeleton layout="cards" tabs={config.tabs.length} items={4} label="กำลังโหลดแท็บข่าว" />;
+
   return (
     <section className="tabbed-news-block">
       <header>
@@ -169,7 +168,7 @@ export function TabbedNewsBlock({
         </div>
       </div>
       {items === undefined && failedKey !== activeKey ? (
-        <div className="tabbed-news-empty" role="status" aria-live="polite">กำลังโหลดข่าว...</div>
+        <ContentDataSkeleton kind="news-tabs" count={4} showImage={config.showImage}/>
       ) : failedKey === activeKey ? (
         <div className="tabbed-news-empty" role="tabpanel">
           <strong>โหลดข่าวไม่สำเร็จ</strong>
@@ -187,16 +186,10 @@ export function TabbedNewsBlock({
               show={config.showImage}
             />
             {items[0].isNew ? <span className="news-new-badge">ใหม่</span> : null}
-            <div
-              className={
-                config.showDescription && items[0].excerpt
-                  ? undefined
-                  : "without-description"
-              }
-            >
+            <div>
               <small>{categoryName(categories, items[0].categoryId)}</small>
               <h3>{items[0].title}</h3>
-              {config.showDescription ? <p>{items[0].excerpt}</p> : null}
+              <p>{items[0].excerpt}</p>
               <time>
                 <CalendarDays size={12} />
                 {items[0].publishedAt}
@@ -216,6 +209,7 @@ export function TabbedNewsBlock({
                 <div>
                   <small>{categoryName(categories, post.categoryId)}</small>
                   <h3>{post.title}</h3>
+                  <p className="tabbed-news-excerpt">{post.excerpt}</p>
                   <time>
                     <CalendarDays size={12} />
                     {post.publishedAt}

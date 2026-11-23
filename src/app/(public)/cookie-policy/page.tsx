@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { publicMetadata } from "@/server/metadata/public-metadata";
 
-export const metadata: Metadata = { title: "นโยบายคุกกี้ | โรงพยาบาลคลองหลวง" };
+export async function generateMetadata(): Promise<Metadata> {
+  return publicMetadata({ path: "/cookie-policy", title: "นโยบายคุกกี้", description: "รายละเอียดการใช้คุกกี้บนเว็บไซต์โรงพยาบาลคลองหลวง" });
+}
 
 export default function CookiePolicyPage() {
   return (

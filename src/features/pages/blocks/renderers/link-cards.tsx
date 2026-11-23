@@ -1,4 +1,5 @@
 "use client";
+import { PublicImageLoading } from "@/components/public/public-image-loading";
 
 import { FileText } from "lucide-react";
 import {
@@ -21,7 +22,7 @@ export function LinkCards({ config }: { config: BlockConfigMap["linkCards"] }) {
           <SecondaryRichText value={config.description} />
         ) : null}
       </header> : null}
-      <div className={`link-cards-grid columns-${config.columns}`}>
+      <div className="link-cards-grid">
         {config.items.map((item) => {
           const external = item.target.kind === "external";
           const media =
@@ -44,6 +45,7 @@ export function LinkCards({ config }: { config: BlockConfigMap["linkCards"] }) {
                     transform: `scale(${item.visual.zoom / 100})`,
                     transformOrigin: `${item.visual.focalPoint.x}% ${item.visual.focalPoint.y}%`,
                   }}/> : <FileText size={30} />}
+                  <PublicImageLoading src={media?.previewUrl}/>
                 </span>
               ) : (
                 <span className="link-service-icon">

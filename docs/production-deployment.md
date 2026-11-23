@@ -45,6 +45,7 @@ The production `/var/www/hos-cms/shared/.env` must include at least:
 NODE_ENV="production"
 DATABASE_URL="mysql://hos_cms:strong-password@127.0.0.1:3306/hos_cms"
 SESSION_COOKIE_SECURE="true"
+SITE_URL="https://cms.pathumpho.go.th"
 MEDIA_STORAGE_DIRECTORY="/var/lib/hos-cms/uploads"
 ```
 

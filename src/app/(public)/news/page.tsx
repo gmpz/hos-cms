@@ -1,8 +1,13 @@
 import { PublicNewsList } from "@/features/news/components/public-news-list";
 import { PostStatus } from "@prisma/client";
 import { listPostPage } from "@/server/posts/repository";
+import { publicMetadata } from "@/server/metadata/public-metadata";
+import type { Metadata } from "next";
 
 export const instant = false;
+export async function generateMetadata(): Promise<Metadata> {
+  return publicMetadata({ path: "/news", title: "ข่าวและผลงาน", description: "ติดตามข่าวสาร กิจกรรม และผลงานของโรงพยาบาลคลองหลวง" });
+}
 
 export default async function PublicNewsPage({
   searchParams,
@@ -19,7 +24,7 @@ export default async function PublicNewsPage({
   const year = typeof query.year === "string" && (query.year === "all" || (/^\d{4}$/.test(query.year) && Number(query.year) >= 2400 && Number(query.year) <= 2800)) ? query.year : "latest";
   const initialPage = await listPostPage({
     page: 1,
-    pageSize: 12,
+    pageSize: 20,
     search: "",
     unitId: unit === "all" ? null : unit,
     categoryId: category === "all" ? null : category,

@@ -6,8 +6,6 @@ import { ChevronDown, ChevronUp, CircleCheck, CircleOff, LoaderCircle, Pencil, P
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AdminListLoadingRows } from "@/components/admin/admin-content-loading";
-import { readPosts, refreshPosts } from "@/features/news/demo/storage";
-import { readDocuments, refreshDocuments } from "@/features/documents/demo/storage";
 import { categoriesChangedEvent, readCategories, refreshCategories, setCategories as updateCategoryCache } from "../demo/storage";
 import type { CategoryScope, DemoCategory } from "../types";
 
@@ -30,6 +28,7 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
   const [pending, setPending] = useState(false);
   const mutationPending = useRef(false);
   const [usage, setUsage] = useState<Record<string, number>>({});
+  const [usageLoaded, setUsageLoaded] = useState(false);
 
   function notify(variant: "success" | "error", title: string, description: string) {
     showGlobalToast({ variant, title, description });
@@ -37,21 +36,24 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
 
   useEffect(() => {
     let active = true;
-    const refresh = () => {
-      setCategories(readCategories(scope));
-      const items = scope === "posts" ? readPosts(true) : readDocuments(true);
-      setUsage(items.reduce<Record<string, number>>((counts, item) => { counts[item.categoryId] = (counts[item.categoryId] ?? 0) + 1; return counts; }, {}));
+    const controller = new AbortController();
+    const refreshUsage = async () => {
+      const response = await fetch(`/api/categories/usage?scope=${scope}`, { cache: "no-store", signal: controller.signal });
+      if (!response.ok) throw new Error("โหลดจำนวนการใช้งานหมวดหมู่ไม่สำเร็จ");
+      const counts: unknown = await response.json();
+      if (typeof counts !== "object" || counts === null || Array.isArray(counts) ||
+        Object.values(counts).some((count) => typeof count !== "number")) throw new Error("ข้อมูลจำนวนการใช้งานหมวดหมู่ไม่ถูกต้อง");
+      if (active) { setUsage(counts as Record<string, number>); setUsageLoaded(true); }
     };
-    const timer = window.setTimeout(refresh, 0);
-    if (scope === "posts") void refreshPosts(true).catch(() => undefined);
-    if (scope === "documents") void refreshDocuments(true).catch(() => undefined);
-    void refreshCategories(scope)
+    const refreshCategoriesFromCache = () => setCategories(readCategories(scope));
+    const refreshCounts = () => { void refreshUsage().catch(() => { if (active) setUsageLoaded(false); }); };
+    void Promise.all([refreshCategories(scope), refreshUsage()])
       .catch(() => { if (active) notify("error", "โหลดหมวดหมู่ไม่สำเร็จ", "กรุณาลองใหม่อีกครั้ง"); })
       .finally(() => { if (active) setLoading(false); });
-    window.addEventListener(categoriesChangedEvent, refresh);
-    window.addEventListener("hos-posts-change", refresh);
-    window.addEventListener("hos-documents-change", refresh);
-    return () => { active = false; window.clearTimeout(timer); window.removeEventListener(categoriesChangedEvent, refresh); window.removeEventListener("hos-posts-change", refresh); window.removeEventListener("hos-documents-change", refresh); };
+    window.addEventListener(categoriesChangedEvent, refreshCategoriesFromCache);
+    window.addEventListener("hos-posts-change", refreshCounts);
+    window.addEventListener("hos-documents-change", refreshCounts);
+    return () => { active = false; controller.abort(); window.removeEventListener(categoriesChangedEvent, refreshCategoriesFromCache); window.removeEventListener("hos-posts-change", refreshCounts); window.removeEventListener("hos-documents-change", refreshCounts); };
   }, [scope]);
 
   async function mutate(action: string, fields: Record<string, unknown>): Promise<boolean> {
@@ -94,6 +96,7 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
 
   async function confirmToggle() {
     if (!toggling) return;
+    if (!usageLoaded) { notify("error", "ตรวจสอบการใช้งานไม่สำเร็จ", "กรุณาโหลดหน้านี้ใหม่อีกครั้ง"); return; }
     if (toggling.active && usage[toggling.id]) { setToggling(null); notify("error", "ปิดใช้งานไม่สำเร็จ", "หมวดหมู่นี้ยังมีเนื้อหาใช้อยู่ กรุณาย้ายเนื้อหาก่อน"); return; }
     if (await mutate("setActive", { id: toggling.id, active: !toggling.active })) {
       notify("success", toggling.active ? "ปิดใช้งานแล้ว" : "เปิดใช้งานแล้ว", `หมวดหมู่ “${toggling.name}” ${toggling.active ? "ปิด" : "เปิด"}ใช้งานเรียบร้อย`);
@@ -112,6 +115,7 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
   async function removeCategory() {
     const target = categories.find((item) => item.id === deleteId);
     if (!target) { setDeleteId(null); return; }
+    if (!usageLoaded) { notify("error", "ตรวจสอบการใช้งานไม่สำเร็จ", "กรุณาโหลดหน้านี้ใหม่อีกครั้ง"); return; }
     if (usage[target.id]) { setDeleteId(null); notify("error", "ลบหมวดหมู่ไม่สำเร็จ", "หมวดหมู่นี้มีเนื้อหาใช้งานอยู่ กรุณาย้ายเนื้อหาก่อน"); return; }
     if (await mutate("delete", { id: target.id })) { setDeleteId(null); notify("success", "ลบหมวดหมู่แล้ว", `ลบ “${target.name}” เรียบร้อย`); }
   }
@@ -125,27 +129,27 @@ export function CategoryManager({ initialScope }: { initialScope: CategoryScope 
 
   return <><main className="category-manager">
     <header><div><h1>จัดการหมวดหมู่</h1><p>หมวดหมู่ใช้ร่วมกันในหน้าสร้างเนื้อหา หน้า public และบล็อก Page Builder</p></div><button type="button" className="primary-button" onClick={() => { setDialogError(""); setAddOpen(true); }}><Plus size={17}/> เพิ่มหมวดหมู่</button></header>
-    <nav aria-label="ประเภทหมวดหมู่">{(["posts", "documents"] as const).map((item) => <button key={item} type="button" disabled={pending} className={scope === item ? "active" : ""} onClick={() => { if (item === scope) return; setLoading(true); setCategories([]); setUsage({}); setScope(item); setSearch(""); setPage(1); setDeleteId(null); window.history.replaceState(null, "", `/admin/categories?scope=${item}`); }}>หมวดหมู่{scopeLabels[item]}</button>)}</nav>
+    <nav aria-label="ประเภทหมวดหมู่">{(["posts", "documents"] as const).map((item) => <button key={item} type="button" disabled={pending} className={scope === item ? "active" : ""} onClick={() => { if (item === scope) return; setLoading(true); setCategories([]); setUsage({}); setUsageLoaded(false); setScope(item); setSearch(""); setPage(1); setDeleteId(null); window.history.replaceState(null, "", `/admin/categories?scope=${item}`); }}>หมวดหมู่{scopeLabels[item]}</button>)}</nav>
     <div className="category-manager-search"><Search size={18}/><input type="search" aria-label={`ค้นหาหมวดหมู่${scopeLabels[scope]}`} placeholder="ค้นหาชื่อหมวดหมู่" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></div>
     {searching ? <p className="category-manager-filter-note">ล้างคำค้นหาก่อนจัดลำดับ เพื่อให้เห็นรายการทั้งหมด</p> : null}
     <section className="category-list-table admin-data-table">
       <div className="admin-data-table-scroll" tabIndex={0} role="region" aria-label="ตารางหมวดหมู่ เลื่อนซ้ายขวาได้"><div className="category-manager-table admin-data-grid" role="table" aria-busy={loading} aria-label={`รายการหมวดหมู่${scopeLabels[scope]}`}>
         <div className="category-manager-table-head category-manager-table-row" role="row"><span>ลำดับ</span><span>ชื่อหมวดหมู่</span><span>เนื้อหา</span><span>สถานะ</span><span>จัดการ</span></div>
-        <div className="category-manager-list" role="rowgroup">{loading ? <AdminListLoadingRows columns={5} rowClassName="category-manager-table-row"/> : visible.map((item) => {
+        <div className="category-manager-list" role="rowgroup">{loading ? <AdminListLoadingRows rowClassName="category-manager-table-row"/> : visible.map((item) => {
           const index = categories.findIndex((entry) => entry.id === item.id);
           return <div role="row" className="category-manager-table-row category-manager-row" key={item.id}>
             <div role="cell" className="category-arrow-order"><span>{index + 1}</span><div><button type="button" disabled={pending || searching || index === 0} title={searching ? "ล้างคำค้นหาก่อนจัดลำดับ" : "เลื่อนขึ้น"} aria-label={`เลื่อน ${item.name} ขึ้น`} onClick={() => void move(item, "up")}><ChevronUp size={14}/></button><button type="button" disabled={pending || searching || index === categories.length - 1} title={searching ? "ล้างคำค้นหาก่อนจัดลำดับ" : "เลื่อนลง"} aria-label={`เลื่อน ${item.name} ลง`} onClick={() => void move(item, "down")}><ChevronDown size={14}/></button></div></div>
             <div role="cell" className="category-manager-name"><strong>{item.name}</strong></div>
-            <div role="cell" className="category-manager-count">{usage[item.id] ?? 0} รายการ</div>
+            <div role="cell" className="category-manager-count">{usageLoaded ? usage[item.id] ?? 0 : "—"} รายการ</div>
             <div role="cell"><span className={`category-manager-status${item.active ? " active" : ""}`}>{item.active ? "ใช้งาน" : "ปิดใช้งาน"}</span></div>
-            <div role="cell" className="category-manager-actions category-icon-actions"><button type="button" title="เปลี่ยนชื่อ" aria-label={`เปลี่ยนชื่อ ${item.name}`} onClick={() => { setDialogError(""); setEditing(item); }}><Pencil size={15}/></button><button type="button" className={item.active ? "category-disable" : "category-enable"} title={item.active ? "ปิดใช้งาน" : "เปิดใช้งาน"} aria-label={`${item.active ? "ปิด" : "เปิด"}ใช้งาน ${item.name}`} onClick={() => setToggling(item)}>{item.active ? <CircleOff size={16}/> : <CircleCheck size={16}/>}</button><button type="button" className="category-manager-delete" onClick={() => setDeleteId(item.id)} disabled={(usage[item.id] ?? 0) > 0 || pending} title={(usage[item.id] ?? 0) > 0 ? "ย้ายเนื้อหาออกจากหมวดหมู่นี้ก่อนลบ" : "ลบหมวดหมู่"} aria-label={`ลบหมวดหมู่ ${item.name}`}><Trash2 size={16}/></button></div>
+            <div role="cell" className="category-manager-actions category-icon-actions"><button type="button" title="เปลี่ยนชื่อ" aria-label={`เปลี่ยนชื่อ ${item.name}`} onClick={() => { setDialogError(""); setEditing(item); }}><Pencil size={15}/></button><button type="button" className={item.active ? "category-disable" : "category-enable"} title={item.active ? "ปิดใช้งาน" : "เปิดใช้งาน"} aria-label={`${item.active ? "ปิด" : "เปิด"}ใช้งาน ${item.name}`} onClick={() => setToggling(item)}>{item.active ? <CircleOff size={16}/> : <CircleCheck size={16}/>}</button><button type="button" className="category-manager-delete" onClick={() => setDeleteId(item.id)} disabled={!usageLoaded || (usage[item.id] ?? 0) > 0 || pending} title={!usageLoaded ? "รอข้อมูลการใช้งานหมวดหมู่" : (usage[item.id] ?? 0) > 0 ? "ย้ายเนื้อหาออกจากหมวดหมู่นี้ก่อนลบ" : "ลบหมวดหมู่"} aria-label={`ลบหมวดหมู่ ${item.name}`}><Trash2 size={16}/></button></div>
           </div>;
         })}{!loading && !filtered.length ? <p className="category-manager-empty">{searching ? "ไม่พบหมวดหมู่ที่ตรงกับคำค้นหา" : "ยังไม่มีหมวดหมู่"}</p> : null}</div>
       </div></div>
       {!loading && filtered.length ? <AdminTablePagination className="category-list-pagination" page={safePage} pageCount={pageCount} pageSize={pageSize} total={filtered.length} label={`เปลี่ยนหน้าหมวดหมู่${scopeLabels[scope]}`} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}/> : null}
     </section>
   </main>
-  {addOpen ? <CategoryDialog title={`เพิ่มหมวดหมู่${scopeLabels[scope]}`} description="ตั้งชื่อให้สั้นและชัดเจน เพื่อใช้จัดกลุ่มเนื้อหา" submitLabel="เพิ่มหมวดหมู่" defaultName="" error={dialogError} pending={pending} onNameChange={() => setDialogError("")} onClose={() => setAddOpen(false)} onSubmit={(event) => void submitName(event, "add")}/> : null}
+  {addOpen ? <CategoryDialog title={`เพิ่มหมวดหมู่${scopeLabels[scope]}`} description="" submitLabel="เพิ่มหมวดหมู่" defaultName="" error={dialogError} pending={pending} onNameChange={() => setDialogError("")} onClose={() => setAddOpen(false)} onSubmit={(event) => void submitName(event, "add")}/> : null}
   {editing ? <CategoryDialog title="เปลี่ยนชื่อหมวดหมู่" description={`แก้ไขชื่อ “${editing.name}” โดยไม่กระทบเนื้อหาที่ใช้งานอยู่`} submitLabel="บันทึกชื่อ" defaultName={editing.name} error={dialogError} pending={pending} onNameChange={() => setDialogError("")} onClose={() => setEditing(null)} onSubmit={(event) => void submitName(event, "edit")}/> : null}
   {toggling ? <ConfirmDialog variant="default" title={`${toggling.active ? "ปิด" : "เปิด"}ใช้งาน “${toggling.name}”?`} description={toggling.active ? "รายการนี้จะไม่ปรากฏเป็นตัวเลือกสำหรับเนื้อหาใหม่" : "รายการนี้จะกลับมาใช้เป็นตัวเลือกสำหรับเนื้อหาใหม่"} confirmLabel={toggling.active ? "ปิดใช้งาน" : "เปิดใช้งาน"} onClose={() => setToggling(null)} onConfirm={() => void confirmToggle()}/> : null}
   {deleteId ? <ConfirmDialog title={`ลบหมวดหมู่ “${categories.find((item) => item.id === deleteId)?.name ?? ""}”?`} description="การลบหมวดหมู่จะย้อนกลับไม่ได้" confirmLabel="ลบหมวดหมู่" onClose={() => setDeleteId(null)} onConfirm={() => void removeCategory()}/> : null}

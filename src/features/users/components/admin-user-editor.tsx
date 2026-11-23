@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Building2, Camera, Check, LoaderCircle, Search, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import Link from "next/link";
 import { useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -71,10 +72,24 @@ export function AdminUserEditor({ user, options, currentUserId }: { user: UserDa
 function Select({ name, label, value, options }: { name: string; label: string; value: string | null; options: Option[] }) { return <label><span>{label}</span><NativeSelect name={name} defaultValue={value ?? ""}><option value="">ไม่ระบุ</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</NativeSelect></label>; }
 
 function UnitMembershipPicker({ options, initialIds, initialPrimaryId }: { options: Option[]; initialIds: string[]; initialPrimaryId: string | null }) {
+  const searchRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState(initialIds);
   const [primaryId, setPrimaryId] = useState(initialPrimaryId ?? "");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !searchRef.current?.contains(event.target)) setOpen(false);
+    };
+    const stopDismissal = listenForDropdownDismissal(
+      () => searchRef.current?.querySelector(".admin-unit-options"),
+      (target) => target instanceof Node && Boolean(searchRef.current?.contains(target)),
+      () => setOpen(false),
+    );
+    document.addEventListener("pointerdown", closeOutside);
+    return () => { document.removeEventListener("pointerdown", closeOutside); stopDismissal(); };
+  }, [open]);
   useLayoutEffect(() => () => {
     setSelectedIds(initialIds);
     setPrimaryId(initialPrimaryId ?? "");
@@ -87,7 +102,7 @@ function UnitMembershipPicker({ options, initialIds, initialPrimaryId }: { optio
   function remove(id: string) { setSelectedIds((current) => current.filter((value) => value !== id)); if (primaryId === id) setPrimaryId(""); }
   return <div className="admin-unit-picker">
     {selectedIds.map((id) => <input key={id} type="hidden" name="unitIds" value={id}/>) }
-    <div className="admin-unit-search"><Search size={17}/><input value={query} placeholder="ค้นหาชื่อหน่วยงาน..." onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}/>{open ? <div className="admin-unit-options">{matches.map((option) => <button key={option.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => add(option.id)}><span>{option.name}</span><Check size={15}/></button>)}{!matches.length ? <p>{options.length ? "ไม่พบหน่วยงานที่เลือกได้" : "ยังไม่มีหน่วยงานในระบบ"}</p> : null}</div> : null}</div>
+    <div ref={searchRef} className="admin-unit-search"><Search size={17}/><input value={query} placeholder="ค้นหาชื่อหน่วยงาน..." onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}/>{open ? <div className="admin-unit-options">{matches.map((option) => <button key={option.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => add(option.id)}><span>{option.name}</span><Check size={15}/></button>)}{!matches.length ? <p>{options.length ? "ไม่พบหน่วยงานที่เลือกได้" : "ยังไม่มีหน่วยงานในระบบ"}</p> : null}</div> : null}</div>
     <div className="admin-unit-selected"><header><strong>หน่วยงานที่เลือก</strong><span>{selected.length} รายการ</span></header>{selected.length ? <ul>{selected.map((unit) => <li key={unit.id}><span title={unit.name}>{unit.name}</span>{unit.id === primaryId ? <em>หลัก</em> : null}<button type="button" aria-label={`นำ ${unit.name} ออก`} onClick={() => remove(unit.id)}><X size={15}/></button></li>)}</ul> : <p>ยังไม่ได้เลือกหน่วยงาน</p>}</div>
     <label className="admin-primary-unit"><span>หน่วยงานหลัก</span><NativeSelect name="primaryUnitId" value={primaryId} onChange={(event) => setPrimaryId(event.target.value)}><option value="">ไม่ระบุ</option>{selected.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</NativeSelect><small>ใช้สำหรับการแสดงผล โดยสิทธิ์จากทุกหน่วยงานที่สังกัดยังเท่ากัน</small></label>
   </div>;

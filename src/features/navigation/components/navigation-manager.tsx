@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { showGlobalToast } from "@/components/ui/global-toast";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -817,14 +818,19 @@ function NavigationMoreActions({
       }
     };
     const close = () => setPosition(null);
+    const stopDismissal = listenForDropdownDismissal(
+      () => menuRef.current,
+      (target) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || menuRef.current?.contains(target)),
+      () => setPosition(null),
+    );
     document.addEventListener("pointerdown", closeOutside);
     document.addEventListener("keydown", closeOnKey);
-    window.addEventListener("scroll", close, true);
+
     window.addEventListener("resize", close);
     return () => {
       document.removeEventListener("pointerdown", closeOutside);
       document.removeEventListener("keydown", closeOnKey);
-      window.removeEventListener("scroll", close, true);
+      stopDismissal();
       window.removeEventListener("resize", close);
     };
   }, [position]);
@@ -909,7 +915,15 @@ function NavigationIconPicker({
         detailsRef.current?.removeAttribute("open");
     };
     document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
+    const stopDismissal = listenForDropdownDismissal(
+      () => detailsRef.current?.querySelector(".navigation-icon-grid"),
+      (target) => target instanceof Node && Boolean(detailsRef.current?.contains(target)),
+      () => detailsRef.current?.removeAttribute("open"),
+    );
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      stopDismissal();
+    };
   }, []);
   return (
     <div className="navigation-icon-field">

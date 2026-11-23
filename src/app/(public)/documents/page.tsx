@@ -1,6 +1,11 @@
 import { PublicDocumentsList } from "@/features/documents/components/public-documents-list";
+import { publicMetadata } from "@/server/metadata/public-metadata";
+import type { Metadata } from "next";
 
 export const instant = false;
+export async function generateMetadata(): Promise<Metadata> {
+  return publicMetadata({ path: "/documents", title: "เอกสาร", description: "ค้นหาและดาวน์โหลดเอกสารเผยแพร่ของโรงพยาบาลคลองหลวง" });
+}
 
 export default async function PublicDocumentsPage({
   searchParams,

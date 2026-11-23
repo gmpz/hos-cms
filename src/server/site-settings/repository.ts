@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { defaultTheme, type SiteSettings, type ThemeTokens } from "@/features/site-settings/types";
+import { defaultSiteSettings } from "@/features/site-settings/demo/storage";
 import { isGoogleMapsUrl } from "@/features/site-settings/map-url";
 import { isSocialUrl, type SocialNetwork } from "@/features/site-settings/social-url";
 import { prisma } from "@/server/database/prisma";
@@ -72,7 +73,7 @@ function toDto(row: { name: string; englishName: string; logoMediaId: string | n
 
 export async function getSiteSettings(): Promise<SiteSettings> {
   const row = await prisma.siteSettings.findUnique({ where: { id: 1 } });
-  if (!row) throw new SiteSettingsInputError("ไม่พบการตั้งค่าเว็บไซต์", 500);
+  if (!row) return defaultSiteSettings;
   return toDto(row);
 }
 
@@ -81,6 +82,20 @@ export async function updateSiteSettings(value: unknown, actorId: string): Promi
   return prisma.$transaction(async (tx) => {
     if (input.logoMediaId && await tx.mediaAsset.count({ where: { id: input.logoMediaId, kind: "IMAGE" } }) !== 1) throw new SiteSettingsInputError("ไม่พบโลโก้ที่เลือก");
     if (input.homepageId && await tx.cmsPage.count({ where: { id: input.homepageId, deletedAt: null } }) !== 1) throw new SiteSettingsInputError("ไม่พบหน้าแรกที่เลือก");
+    const existing = await tx.siteSettings.findUnique({ where: { id: 1 }, select: { revision: true } });
+    if (!existing) {
+      if (input.revision !== defaultSiteSettings.revision) throw new SiteSettingsInputError("ข้อมูลถูกแก้ไขจากอีกหน้าต่าง กรุณาโหลดหน้าใหม่", 409);
+      const row = await tx.siteSettings.create({ data: {
+        id: 1, name: input.name, englishName: input.englishName, logoMediaId: input.logoMediaId,
+        logoFocusX: input.logoFocusX, logoFocusY: input.logoFocusY, logoZoom: input.logoZoom,
+        homepageId: input.homepageId, address: input.address, mapUrl: input.mapUrl,
+        facebookUrl: input.facebookUrl, youtubeUrl: input.youtubeUrl, lineUrl: input.lineUrl,
+        phone: input.phone, email: input.email, theme: input.theme as unknown as Prisma.InputJsonObject,
+        revision: input.revision + 1,
+      } });
+      await tx.auditLog.create({ data: { id: randomUUID(), actorId, action: "site-settings.update", entityType: "site-settings", entityId: "site", summary: "สร้างข้อมูลและธีมเว็บไซต์" } });
+      return toDto(row);
+    }
     const updated = await tx.siteSettings.updateMany({ where: { id: 1, revision: input.revision }, data: {
       name: input.name, englishName: input.englishName, logoMediaId: input.logoMediaId, logoFocusX: input.logoFocusX, logoFocusY: input.logoFocusY, logoZoom: input.logoZoom, homepageId: input.homepageId,
       address: input.address, mapUrl: input.mapUrl, facebookUrl: input.facebookUrl, youtubeUrl: input.youtubeUrl, lineUrl: input.lineUrl, phone: input.phone, email: input.email, theme: input.theme as unknown as Prisma.InputJsonObject,

@@ -1,3 +1,4 @@
+import { PublicImageLoading } from "@/components/public/public-image-loading";
 import type { DemoMediaItem } from "@/features/media/demo/media-items";
 import { mediaPreviewStyle } from "@/features/media/demo/media-registry";
 import type { DemoPost } from "@/features/pages/demo/data";
@@ -13,5 +14,6 @@ export function NewsCoverImage({ post, media, src }: {
   return <>
     {post.coverFit === "contain" ? <span className="news-cover-image-backdrop" style={sourceStyle} aria-hidden="true" /> : null}
     <span className="news-cover-image-layer" style={{ ...sourceStyle, ...newsCoverDisplayStyle(post) }} aria-hidden="true" />
+    <PublicImageLoading src={media?.previewUrl || src} />
   </>;
 }

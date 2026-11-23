@@ -51,7 +51,7 @@ export async function createPageSummary(name: string, path: string): Promise<Dem
   return data;
 }
 
-export async function actOnPageSummary(id: string, action: "duplicate" | "unpublish" | "delete" | "restore" | "purge" | "metadata", revision: number, values?: { name: string; path: string }): Promise<void> {
+export async function actOnPageSummary(id: string, action: "duplicate" | "unpublish" | "delete" | "restore" | "purge" | "metadata", revision: number, values?: { name: string; path: string }, skipListRefresh = false): Promise<void> {
   await responseData(await fetch(`/api/pages/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, revision, ...values }) }));
-  await refreshPageSummaries();
+  if (!skipListRefresh) await refreshPageSummaries();
 }

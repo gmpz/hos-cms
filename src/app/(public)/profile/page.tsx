@@ -35,7 +35,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   const toastStatus = query.saved === "1" ? "saved" : query.error === "profile" ? "invalid-profile" : query.error === "name" ? "invalid-name" : query.error === "photo" ? "invalid-photo" : query.error === "invalid" ? "invalid" : null;
   return <section className="profile-page">
     <ProfileToast key={toastStatus ?? "idle"} status={toastStatus}/>
-    <header><small>บัญชีผู้ใช้งาน</small><h1>โปรไฟล์ของฉัน</h1><p>จัดการข้อมูลบุคลากร รูปโปรไฟล์ และข้อมูลติดต่อ</p></header>
+    <header><h1>โปรไฟล์ของฉัน</h1><p>จัดการข้อมูลบุคลากร รูปโปรไฟล์ และข้อมูลติดต่อ</p></header>
     <div className="profile-grid">
       <aside className="profile-summary-card">
         <div className="profile-summary-identity"><span className="profile-summary-photo" style={photoUrl ? { backgroundImage: `url(${photoUrl})`, ...personnelPhotoPositionStyle(focus, user.profilePhotoZoom) } : undefined}>{photoUrl ? null : <UserRound size={48}/>}</span><div><h2>{user.displayName}</h2><p>@{user.username}</p></div></div>

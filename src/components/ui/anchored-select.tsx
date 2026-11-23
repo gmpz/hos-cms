@@ -3,6 +3,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { listenForDropdownDismissal } from "./dropdown-scroll";
 
 type Option = { value: string; label: string; description?: string; group?: string; disabled?: boolean };
 
@@ -25,13 +26,27 @@ export function AnchoredSelect({ value, options, onChange, label, invalid = fals
   const updatePosition = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const settingsField = triggerRef.current?.closest<HTMLElement>(".block-settings-layer .settings-field");
+    const drawer = settingsField?.closest<HTMLElement>(".block-settings");
     const margin = 8;
-    const roomBelow = window.innerHeight - rect.bottom - margin * 2;
-    const roomAbove = rect.top - margin * 2;
+    const drawerBounds = drawer?.getBoundingClientRect();
+    const headerBottom = drawer?.querySelector(":scope > header")?.getBoundingClientRect().bottom ?? drawerBounds?.top ?? margin;
+    const roomBelow = (drawerBounds?.bottom ?? window.innerHeight) - rect.bottom - margin * 2;
+    const roomAbove = rect.top - (drawer ? headerBottom : 0) - margin * 2;
     const menuHeight = Math.min(320, options.length * 42 + 10);
     const above = roomBelow < Math.min(menuHeight, 180) && roomAbove > roomBelow;
     const maxHeight = Math.max(80, Math.min(320, above ? roomAbove : roomBelow));
     const width = Math.min(rect.width, window.innerWidth - margin * 2);
+    if (settingsField) {
+      const fieldBounds = settingsField.getBoundingClientRect();
+      setPosition({
+        top: above ? rect.top - fieldBounds.top - Math.min(menuHeight, maxHeight) - 4 : rect.bottom - fieldBounds.top + 4,
+        left: rect.left - fieldBounds.left,
+        width,
+        maxHeight,
+      });
+      return;
+    }
     setPosition({
       top: above ? Math.max(margin, rect.top - Math.min(menuHeight, maxHeight) - 4) : rect.bottom + 4,
       left: Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin)),
@@ -53,21 +68,26 @@ export function AnchoredSelect({ value, options, onChange, label, invalid = fals
     const closeEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); }
     };
+    const stopDismissal = listenForDropdownDismissal(
+      () => menuRef.current,
+      (target) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || menuRef.current?.contains(target)),
+      () => setOpen(false),
+    );
     window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
     document.addEventListener("pointerdown", closeOutside);
     document.addEventListener("keydown", closeEscape);
     return () => {
       window.cancelAnimationFrame(focusFrame);
       window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      stopDismissal();
       document.removeEventListener("pointerdown", closeOutside);
       document.removeEventListener("keydown", closeEscape);
     };
   }, [open, updatePosition]);
 
   const selected = options.find((option) => option.value === value);
-  const resolvePortalTarget = () => triggerRef.current?.closest(".document-editor")
+  const resolvePortalTarget = () => triggerRef.current?.closest(".block-settings-layer .settings-field")
+    ?? triggerRef.current?.closest(".document-editor")
     ?? triggerRef.current?.closest(".admin-shell, .public-shell")
     ?? document.body;
   return <>

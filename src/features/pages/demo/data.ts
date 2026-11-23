@@ -14,6 +14,8 @@ export type DemoPost = {
   hasUnpublishedChanges?: boolean;
   /** Admin-only comparison baseline for saved news drafts. */
   publishedBlocks?: ArticleBlock[];
+  /** Admin-only published values used to label form fields with saved draft changes. */
+  publishedDetails?: Pick<DemoPost, "title" | "categoryId" | "unitId" | "coverMediaId" | "coverFit" | "coverFocus" | "coverZoom">;
   /** Derived by the server from the publication timestamp; never edited by authors. */
   isNew?: boolean;
   updatedAt: string;
@@ -26,6 +28,8 @@ export type DemoPost = {
   coverZoom: number;
   showCoverInContent: boolean;
   blocks: ArticleBlock[];
+  editorMode?: "blocks" | "form";
+  formPayload?: unknown;
   revision?: number;
   viewCount?: number;
 };

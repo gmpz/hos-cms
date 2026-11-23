@@ -71,6 +71,12 @@ export async function POST(request: Request) {
         if (typeof data.active !== "boolean") throw new CategoryRequestError("สถานะไม่ถูกต้อง");
         const existing = await tx.category.findFirst({ where: { id, scope } });
         if (!existing) throw new CategoryRequestError("ไม่พบหมวดหมู่", 404);
+        if (!data.active) {
+          const usage = scope === CategoryScope.POSTS
+            ? await tx.post.count({ where: { categoryId: id, deletedAt: null } })
+            : await tx.document.count({ where: { categoryId: id, deletedAt: null } });
+          if (usage > 0) throw new CategoryRequestError("หมวดหมู่นี้ยังมีเนื้อหาใช้งานอยู่ กรุณาย้ายเนื้อหาก่อน", 409);
+        }
         await tx.category.update({ where: { id }, data: { active: data.active } });
         summary = `${data.active ? "เปิด" : "ปิด"}ใช้งานหมวดหมู่ ${existing.name}`;
       } else if (action === "reorder") {

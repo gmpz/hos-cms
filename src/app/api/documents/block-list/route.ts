@@ -8,9 +8,9 @@ const uuid = /^[0-9a-f-]{36}$/i;
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const pageText = params.get("page") ?? "1";
-  const limitText = params.get("limit") ?? "6";
+  const limitText = params.get("limit") ?? "10";
   if (!/^[1-9]\d*$/.test(pageText) || !Number.isSafeInteger(Number(pageText)) ||
-    !/^[1-9]\d*$/.test(limitText) || Number(limitText) > 12)
+    !/^[1-9]\d*$/.test(limitText) || Number(limitText) > 20)
     return NextResponse.json({ error: "เลขหน้าหรือจำนวนรายการไม่ถูกต้อง" }, { status: 400 });
   const categoryId = params.get("category") || null;
   if (categoryId && !uuid.test(categoryId))

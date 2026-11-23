@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { DocumentFileIcon } from "./document-file-icon";
+import { PdfMediaThumbnail } from "./pdf-media-thumbnail";
+import { AdminMediaLoading } from "./admin-media-loading";
 import type { DemoMediaItem } from "../demo/media-items";
 import {
   addUploadedMediaItem,
@@ -22,7 +24,7 @@ import {
   mediaPreviewStyle,
   toDemoMediaItem,
 } from "../demo/media-registry";
-import { documentFileAccept, isSupportedDocumentFile } from "../file-behavior";
+import { documentFileAccept, isPdfFile, isSupportedDocumentFile } from "../file-behavior";
 import { fetchMediaPickerPage, uploadMediaFile } from "../upload-media-file";
 
 type Props = {
@@ -448,7 +450,7 @@ function OpenMediaPicker({
           {loadError && entries.length === 0 ? (
             <div className="media-picker-empty" role="alert">{loadError} <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div>
           ) : loading && entries.length === 0 ? (
-            <p className="media-picker-empty" role="status">กำลังโหลดไฟล์...</p>
+            <AdminMediaLoading view={view} picker />
           ) : entries.length === 0 ? (
             <p className="media-picker-empty">ไม่พบไฟล์ที่ค้นหา</p>
           ) : view === "grid" ? (
@@ -467,7 +469,9 @@ function OpenMediaPicker({
                     className={`media-picker-thumb ${item.kind === "document" ? "document" : ""}`}
                     style={item.kind === "image" ? mediaPreviewStyle(item) : undefined}
                   >
-                    {item.kind === "document" ? (
+                    {item.kind === "document" && item.previewUrl && isPdfFile(item) ? (
+                      <PdfMediaThumbnail url={item.previewUrl} name={item.name} cover />
+                    ) : item.kind === "document" ? (
                       <DocumentFileIcon file={item} size={28} />
                     ) : (
                       <PreviewIcon size={23} />
@@ -502,7 +506,9 @@ function OpenMediaPicker({
                     className={`media-picker-thumb ${item.kind === "document" ? "document" : ""}`}
                     style={item.kind === "image" ? mediaPreviewStyle(item) : undefined}
                   >
-                    {item.kind === "document" ? (
+                    {item.kind === "document" && item.previewUrl && isPdfFile(item) ? (
+                      <PdfMediaThumbnail url={item.previewUrl} name={item.name} cover />
+                    ) : item.kind === "document" ? (
                       <DocumentFileIcon file={item} size={20} />
                     ) : (
                       <PreviewIcon size={18} />

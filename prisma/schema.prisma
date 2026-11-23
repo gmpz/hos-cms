@@ -137,6 +137,8 @@ model Post {
   coverZoom             Int        @default(100) @map("cover_zoom") @db.UnsignedSmallInt
   showCoverInContent    Boolean    @default(true) @map("show_cover_in_content")
   blocks                Json
+  editorMode            String     @default("blocks") @map("editor_mode") @db.VarChar(16)
+  formPayload           Json?      @map("form_payload")
   publishedSnapshot     Json?      @map("published_snapshot")
   publishedTitle        String?    @map("published_title") @db.VarChar(300)
   publishedExcerpt      String?    @map("published_excerpt") @db.Text

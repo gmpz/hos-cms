@@ -21,8 +21,14 @@ The category manager and category choices now read and write the MySQL catalog
 through `/api/categories`; obsolete category browser-storage snapshots are discarded.
 The catalog can be initialized with basic production categories using UUIDs; administrators can then add or edit categories.
 Posts now live in `cms_posts`: title, excerpt, owner, publication state, category and unit FKs,
-cover media ID and timestamps are columns; ordered article blocks are JSON. Cover
-display mode, focal point, and zoom have separate draft and published columns so card
+cover media ID and timestamps are columns; ordered article blocks are JSON. New posts may
+use the fixed news form (`editor_mode = form`) or the existing freeform block editor
+(`blocks`). Existing posts default to `blocks`. Form posts retain a versioned
+`form_payload`; the server validates its limited rich text and media fields and
+generates ordered display blocks. The editor mode cannot change after the first save.
+Public reads continue to render published blocks, and the post excerpt for form posts
+is derived from the beginning of the body. Cover display mode, focal point, and zoom
+have separate draft and published columns so card
 previews can change without affecting public cards. Saved edits to a published
 post remain in draft fields and set `has_unpublished_changes`; the
 published snapshot and public-list fields remain unchanged until the administrator
@@ -155,6 +161,10 @@ TypeScript alone does not enforce input validation or referential integrity.
   the block title; older snapshots migrate with an empty description.
   Version 4 uses the same allowlisted icon catalog as the primary navigation;
   legacy service-group icon names migrate to their matching shared icons.
+  Version 5 fixes the layout at three columns on wide screens. Older blocks
+  with a two-column setting migrate to three columns when read.
+  Version 6 allows each service group to omit its icon; earlier groups keep
+  their selected icons.
   The contact-info block v2 stores an optional numeric phone extension separately
   from the main phone number; version 1 blocks migrate with an empty extension.
   The news-tabs block v3 stores its block description as plain text; older rich-text
@@ -197,7 +207,8 @@ TypeScript alone does not enforce input validation or referential integrity.
   the owner-then-category query behavior of news tabs. Version 6 adds a per-tab
   fiscal-year filter (all years or a specific year); older
   tabs migrate to all years. The public block queries one page of published
-  documents at a time.
+  documents at a time. The documents block offers 10, 15, or 20 items per page
+  for new settings and accepts legacy page sizes up to 20.
   Render Markdown safely; no arbitrary HTML, classes or scripts from content.
 - The Page Builder and post editor share block defaults, settings UI, and renderer;
   the post editor only controls which block types can be inserted.

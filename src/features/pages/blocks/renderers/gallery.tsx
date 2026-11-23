@@ -1,4 +1,6 @@
 "use client";
+import { PublicImageLoading } from "@/components/public/public-image-loading";
+
 
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -144,7 +146,7 @@ export function Gallery({ config }: { config: GalleryConfig }) {
       <button type="button" className="gallery-lightbox-backdrop" onClick={() => setActive(null)} aria-label="ปิดรูปภาพ"/>
       <div className="gallery-lightbox-content">
         <button type="button" className="gallery-lightbox-close" onClick={() => setActive(null)} aria-label="ปิด"><X size={23}/></button>
-        <div className="gallery-lightbox-image" style={mediaPreviewStyle(media)} role="img" aria-label={selected.alt || media?.alt || media?.name || "รูปภาพ"}/>
+        <div className="gallery-lightbox-image" style={mediaPreviewStyle(media)} role="img" aria-label={selected.alt || media?.alt || media?.name || "รูปภาพ"}><PublicImageLoading src={media?.previewUrl}/></div>
         {config.images.length > 1 ? <>
           <button type="button" className="gallery-lightbox-arrow previous" onClick={() => setActive((activeIndex - 1 + config.images.length) % config.images.length)} aria-label="รูปก่อนหน้า"><ChevronLeft size={27}/></button>
           <button type="button" className="gallery-lightbox-arrow next" onClick={() => setActive((activeIndex + 1) % config.images.length)} aria-label="รูปถัดไป"><ChevronRight size={27}/></button>
@@ -165,7 +167,7 @@ export function Gallery({ config }: { config: GalleryConfig }) {
       {config.images.map((item, index) => {
         const itemMedia = displayMediaFor(item);
         return <button type="button" className="gallery-slider-image" key={item.mediaId} onClick={() => setActive(index)} aria-label={`เปิดดูภาพขนาดใหญ่ ${item.alt || itemMedia?.name || `รูปที่ ${index + 1}`}`}>
-          <span className={`block-media ${itemMedia ? "has-media" : ""}`} style={mediaPreviewStyle(itemMedia)} role="img" aria-label={item.alt || itemMedia?.alt || "รูปภาพ"}/>
+          <span className={`block-media ${itemMedia ? "has-media" : ""}`} style={mediaPreviewStyle(itemMedia)} role="img" aria-label={item.alt || itemMedia?.alt || "รูปภาพ"}><PublicImageLoading src={itemMedia?.previewUrl}/></span>
         </button>;
       })}
       </div>
@@ -177,7 +179,7 @@ export function Gallery({ config }: { config: GalleryConfig }) {
       {config.images.length ? config.images.map((item, index) => {
         const itemMedia = displayMediaFor(item);
         return <button type="button" className="gallery-item" key={item.mediaId} onClick={() => setActive(index)} aria-label={`เปิดดูภาพขนาดใหญ่ ${item.alt || itemMedia?.name || `รูปที่ ${index + 1}`}`}>
-          <span className={`block-media ${itemMedia ? "has-media" : ""}`} style={mediaPreviewStyle(itemMedia)} role="img" aria-label={item.alt || itemMedia?.alt || "รูปภาพ"}/>
+          <span className={`block-media ${itemMedia ? "has-media" : ""}`} style={mediaPreviewStyle(itemMedia)} role="img" aria-label={item.alt || itemMedia?.alt || "รูปภาพ"}><PublicImageLoading src={itemMedia?.previewUrl}/></span>
         </button>;
       }) : <p className="block-placeholder">เลือกภาพจากคลังสื่อเพื่อสร้างแกลเลอรี</p>}
     </div>}

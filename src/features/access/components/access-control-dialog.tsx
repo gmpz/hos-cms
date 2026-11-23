@@ -1,7 +1,8 @@
 "use client";
 
 import { Building2, Check, Globe2, LockKeyhole, Plus, Search, ShieldCheck, UserRound, Users, X } from "lucide-react";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import type { AccessGrants, AccessLevel, AccessOption, AccessOptions } from "@/features/access/types";
 
 function UserAccessAvatar({ option }: { option: AccessOption }) {
@@ -68,6 +69,14 @@ function AccessAutocomplete({ options, grants, onChange }: {
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsId = useId();
+  useEffect(() => {
+    if (!open) return;
+    return listenForDropdownDismissal(
+      () => document.getElementById(suggestionsId),
+      (target) => target instanceof Node && Boolean(inputRef.current?.closest(".access-autocomplete")?.contains(target)),
+      () => setOpen(false),
+    );
+  }, [open, suggestionsId]);
   const selectedUnits = options.units.filter((option) => grants.unitIds.includes(option.id));
   const selectedUsers = options.users.filter((option) => grants.userIds.includes(option.id));
   const matches = useMemo(() => {

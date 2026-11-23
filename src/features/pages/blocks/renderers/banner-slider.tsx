@@ -1,7 +1,9 @@
 "use client";
+import { PublicImageLoading } from "@/components/public/public-image-loading";
+
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BlockConfigMap } from "../config/types";
 import { SecondaryRichText } from "./secondary-rich-text";
 import { MediaInteractionOverlay } from "./media-interaction-overlay";
@@ -18,6 +20,10 @@ export function BannerSlider({
   config: BlockConfigMap["bannerSlider"];
   interactionDisabled?: boolean;
 }) {
+  const [settledImages, setSettledImages] = useState<ReadonlySet<string>>(() => new Set());
+  const imageSettled = useCallback((src: string) => {
+    setSettledImages(current => current.has(src) ? current : new Set([...current, src]));
+  }, []);
   const [position, setPosition] = useState(1);
   const [transitionEnabled, setTransitionEnabled] = useState(true);
   const moving = useRef(false);
@@ -44,6 +50,8 @@ export function BannerSlider({
   const count = displaySlides.length;
   const safePosition = position > count + 1 ? 1 : position;
   const safeActive = count > 0 ? (safePosition - 1 + count) % count : 0;
+  const activeImage = displaySlides[safeActive]?.media?.previewUrl;
+  const activeImageReady = !activeImage || settledImages.has(activeImage);
   const move = (direction: -1 | 1) => {
     if (count < 2 || moving.current) return;
     moving.current = true;
@@ -60,7 +68,7 @@ export function BannerSlider({
     if (resetFrame.current !== null) window.cancelAnimationFrame(resetFrame.current);
   }, []);
   useEffect(() => {
-    if (config.mode !== "slider" || !config.autoplay || count < 2) return;
+    if (!activeImageReady || config.mode !== "slider" || !config.autoplay || count < 2) return;
     const timer = window.setInterval(
       () => {
         if (moving.current) return;
@@ -70,7 +78,7 @@ export function BannerSlider({
       config.intervalSeconds * 1000,
     );
     return () => window.clearInterval(timer);
-  }, [config.mode, config.autoplay, config.intervalSeconds, count]);
+  }, [config.mode, config.autoplay, config.intervalSeconds, count, activeImageReady, safeActive]);
   if (count === 0) {
     if (config.presentation !== "imageOnly" || !interactionDisabled) return null;
     return (
@@ -132,6 +140,7 @@ export function BannerSlider({
             aria-hidden={!visible}
             inert={!visible}
           >
+            <PublicImageLoading src={media?.previewUrl} onSettled={imageSettled} />
             <MediaInteractionOverlay interaction={slide.imageInteraction} media={media ?? null} label={slide.title || "แบนเนอร์"} disabled={interactionDisabled} />
             {config.presentation === "imageOnly" ? (
               <div className="banner-image-placeholder" aria-hidden="true">

@@ -1,29 +1,21 @@
 "use client";
+import { PublicDocumentRow } from "./public-document-row";
+import { ContentDataSkeleton } from "@/features/pages/blocks/renderers/content-data-skeleton";
 
-import { CalendarDays, Download, FileText, Search } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { PublicPagination } from "@/components/public/public-pagination";
 import {
   categoriesChangedEvent,
   readCategories,
 } from "@/features/categories/demo/storage";
-import { documentActionLabel, isPdfFile } from "@/features/media/file-behavior";
-import { DocumentFileIcon } from "@/features/media/components/document-file-icon";
-import { DocumentFileLink } from "@/features/media/components/document-file-link";
-import { DocumentNewBadge } from "./document-new-badge";
-import { documentFileUrl } from "../document-file-name";
-import { recordDocumentAccess } from "../record-document-access";
-import { documentMedia } from "../document-media";
 import type { DemoUnit } from "@/features/units/demo/model";
 import { readUnits } from "@/features/units/demo/storage";
-import type { DemoDocument } from "../demo/model";
 import { documentsChangeEvent, fetchPublicDocumentPage, type PublicDocumentPage } from "../demo/storage";
 
 const subscribeToHydration = () => () => undefined;
-const pageSize = 10;
-const skeletonDelayMs = 180;
-const skeletonMinimumMs = 320;
+const pageSize = 20;
 
 export function PublicDocumentsList({
   initialUnit = "all",
@@ -51,31 +43,13 @@ export function PublicDocumentsList({
   const [categoryId, setCategoryId] = useState(initialCategory);
   const [fiscalYear, setFiscalYear] = useState(initialYear);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showSkeleton, setShowSkeleton] = useState(false);
-  const skeletonStartedAt = useRef<number | null>(null);
   const queryKey = JSON.stringify([currentPage, debouncedSearch, categoryId, unitId, fiscalYear, refreshKey]);
   const loading = loadedKey !== queryKey;
 
-  useEffect(() => {
-    const timers: number[] = [];
-    if (loading) {
-      skeletonStartedAt.current = null;
-      timers.push(window.setTimeout(() => setShowSkeleton(false), 0));
-      timers.push(window.setTimeout(() => {
-        skeletonStartedAt.current = performance.now();
-        setShowSkeleton(true);
-      }, skeletonDelayMs));
-    } else if (skeletonStartedAt.current !== null) {
-      const visibleFor = performance.now() - skeletonStartedAt.current;
-      timers.push(window.setTimeout(() => {
-        skeletonStartedAt.current = null;
-        setShowSkeleton(false);
-      }, Math.max(0, skeletonMinimumMs - visibleFor)));
-    } else {
-      timers.push(window.setTimeout(() => setShowSkeleton(false), 0));
-    }
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [loading]);
+  const showSkeleton = loading || search.trim() !== debouncedSearch;
+  const skeletonCount = currentPage > 1 && documentPage
+    ? Math.max(1, Math.min(pageSize, documentPage.total - (currentPage - 1) * pageSize))
+    : pageSize;
 
   useEffect(() => {
     const refresh = () => {
@@ -121,7 +95,7 @@ export function PublicDocumentsList({
   }, [currentPage, debouncedSearch, categoryId, unitId, fiscalYear, refreshKey]);
 
   if (!hydrated || (loading && !documentPage && !loadError))
-    return <PublicDocumentsSkeleton showRows={showSkeleton} />;
+    return <PublicDocumentsSkeleton count={skeletonCount} />;
 
   const categoryCounts = documentPage?.categoryCounts ?? {};
   const yearTotal = Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
@@ -236,16 +210,14 @@ export function PublicDocumentsList({
             </NativeSelect>
           </label>
         </div>
-        <div className="public-document-summary">
+        <div className="public-list-summary">
           <div>
             <span>รายการเอกสาร</span>
-            <p><strong>{total}</strong> รายการ
-              {selectedUnit ? ` จาก ${selectedUnit.name}` : ""}
-            </p>
+            <p>{showSkeleton ? "กำลังโหลดรายการเอกสาร..." : <><strong>{total}</strong> รายการ{selectedUnit ? ` จาก ${selectedUnit.name}` : ""}</>}</p>
           </div>
         </div>
-        {showSkeleton ? <DocumentRowsSkeleton /> : loadError ? <div className="public-news-index-empty" role="alert"><FileText size={30} /><h2>โหลดเอกสารไม่สำเร็จ</h2><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div> : total ? (
-          <div className="public-document-list unit-document-list list-view public-data-list-ready" key={loadedKey}>
+        {showSkeleton ? <DocumentRowsSkeleton count={skeletonCount} /> : loadError ? <div className="public-news-index-empty" role="alert"><FileText size={30} /><h2>โหลดเอกสารไม่สำเร็จ</h2><p>{loadError}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>ลองอีกครั้ง</button></div> : total ? (
+          <div className="unit-document-list document-block-list public-data-list-ready" key={loadedKey}>
             {visibleDocuments.map((document) => (
               <PublicDocumentRow
                 key={document.id}
@@ -275,7 +247,7 @@ export function PublicDocumentsList({
   );
 }
 
-function PublicDocumentsSkeleton({ showRows }: { showRows: boolean }) {
+export function PublicDocumentsSkeleton({ count }: { count: number }) {
   return (
     <div className="public-document-index public-document-index-skeleton" role="status" aria-busy="true" aria-live="polite" aria-label="กำลังโหลดเอกสาร">
       <header className="public-document-hero">
@@ -288,71 +260,13 @@ function PublicDocumentsSkeleton({ showRows }: { showRows: boolean }) {
           <label className="public-document-filter"><span>ปีงบประมาณ</span><NativeSelect disabled aria-label="ปีงบประมาณ"><option>ปีล่าสุด</option></NativeSelect></label>
           <label className="public-owner-filter"><span>เจ้าของเอกสาร</span><NativeSelect disabled aria-label="เจ้าของเอกสาร"><option>ทั้งหมด</option></NativeSelect></label>
         </div>
-        <div className="public-document-summary"><div><span>รายการเอกสาร</span><p>กำลังโหลดรายการเอกสาร...</p></div></div>
-        {showRows ? <DocumentRowsSkeleton announce={false}/> : <div className="document-rows-skeleton-delay" aria-hidden="true"/>}
+        <div className="public-list-summary"><div><span>รายการเอกสาร</span><p>กำลังโหลดรายการเอกสาร...</p></div></div>
+        <DocumentRowsSkeleton count={count}/>
       </div>
     </div>
   );
 }
 
-function DocumentRowsSkeleton({ announce = true }: { announce?: boolean }) {
-  return (
-    <div className="public-document-list unit-document-list document-rows-skeleton" role={announce ? "status" : undefined} aria-label={announce ? "กำลังโหลดรายการเอกสาร" : undefined}>
-      {Array.from({ length: 6 }, (_, index) => (
-        <div className="document-row-skeleton" aria-hidden="true" key={index}>
-          <span className="news-skeleton-block document-row-skeleton-icon"/>
-          <span className="document-row-skeleton-copy">
-            <span className="news-skeleton-block document-row-skeleton-title"/>
-            <span className="news-skeleton-block document-row-skeleton-meta"/>
-          </span>
-          <span className="news-skeleton-block document-row-skeleton-action"/>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PublicDocumentRow({
-  document,
-}: {
-  document: DemoDocument;
-}) {
-  const media = documentMedia(document);
-  if (media && isPdfFile(media)) {
-    return <div className="public-document-row public-document-row-with-download unit-document-row-with-download">
-      <DocumentFileLink className="public-document-open" media={media} href={documentFileUrl(document.id, document.title, media.mimeType)}>
-        <DocumentFileIcon file={media} size={19} />
-        <span>
-          <strong>{document.title}</strong>
-          <small className="public-document-card-meta">
-            <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
-            <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
-            <DocumentNewBadge isNew={document.isNew}/>
-          </small>
-        </span>
-      </DocumentFileLink>
-      <a className="public-document-action public-document-download" href={documentFileUrl(document.id, document.title, media.mimeType, "download")} aria-label={`ดาวน์โหลด PDF ${document.title}`} title="ดาวน์โหลด PDF" onClick={() => recordDocumentAccess(document.id, "download")}><Download size={16}/><span>{media.size}</span></a>
-    </div>;
-  }
-  const content = (
-    <>
-      <DocumentFileIcon file={media} size={19} />
-      <span>
-        <strong>{document.title}</strong>
-        <small className="public-document-card-meta">
-          <span><CalendarDays size={12} aria-hidden="true" />{document.publishedAt ?? "ไม่ระบุวันที่"}</span>
-          <span aria-label={`ดาวน์โหลด ${document.downloadCount.toLocaleString("th-TH")} ครั้ง`}><Download size={12} aria-hidden="true" />{document.downloadCount.toLocaleString("th-TH")} ครั้ง</span>
-          <DocumentNewBadge isNew={document.isNew}/>
-        </small>
-      </span>
-      {media ? <span className="public-document-action public-document-download unit-document-download-indicator" title={documentActionLabel(media)}><Download size={16} aria-hidden="true"/><span>{media.size}</span></span> : <b className="public-document-action">{document.mediaIds.length} ไฟล์</b>}
-    </>
-  );
-  if (!media)
-    return <div className="public-document-row">{content}</div>;
-  return (
-    <DocumentFileLink className="public-document-row" media={media} href={documentFileUrl(document.id, document.title, media.mimeType)}>
-      {content}
-    </DocumentFileLink>
-  );
+function DocumentRowsSkeleton({ count }: { count: number }) {
+  return <ContentDataSkeleton kind="documents" count={count} immediate/>;
 }
