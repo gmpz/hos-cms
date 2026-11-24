@@ -71,7 +71,7 @@ export function AdminTopbar({ collapsed, onMenu, onToggle, displayName, photoUrl
         </nav>
       </div>
       <div className="admin-topbar-actions">
-        <AccountMenu displayName={displayName} variant="admin" photoUrl={photoUrl} photoFocusX={photoFocusX} photoFocusY={photoFocusY} photoZoom={photoZoom}/>
+        <AccountMenu displayName={displayName} variant="admin" role="ADMIN" photoUrl={photoUrl} photoFocusX={photoFocusX} photoFocusY={photoFocusY} photoZoom={photoZoom}/>
       </div>
     </header>
   );

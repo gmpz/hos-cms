@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { currentUser } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { deleteMediaFile, writeMediaFile } from "@/server/media/storage";
-import { createProfileMaster, createUser, deleteProfileMaster, deleteUser, moveProfileMaster, resetUserPassword, unlockUserLogin, revokeUserSessions, setUserStatus, updateProfileMaster, updateUser } from "@/server/auth/users";
+import { createProfileMaster, createUser, deleteProfileMaster, deleteUser, moveProfileMaster, resetUserPassword, resetUserTotp, unlockUserLogin, unlockUserOtp, revokeUserSessions, setUserStatus, updateProfileMaster, updateUser } from "@/server/auth/users";
 import { isValidPhone, isValidPhoneExtension, phoneDigits } from "./phone";
 import { isValidPassword } from "@/features/auth/password-policy.mjs";
 
@@ -30,6 +30,8 @@ function messageFor(error: unknown): string {
   if (error instanceof Error && error.message === "SELF_ACTION") return "ไม่สามารถดำเนินการนี้กับบัญชีที่กำลังใช้งานอยู่";
   if (error instanceof Error && error.message === "UNAUTHORIZED") return "คุณไม่มีสิทธิ์ดำเนินการ";
   if (error instanceof Error && error.message === "INVALID_PASSWORD") return "รหัสผ่านไม่ครบตามเงื่อนไขที่กำหนด";
+  if (error instanceof Error && error.message === "INVALID_ADMIN_PASSWORD") return "รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง หรือบัญชีถูกล็อกชั่วคราว";
+  if (error instanceof Error && error.message === "TOTP_NOT_ENABLED") return "บัญชีนี้ไม่ได้เปิดใช้งาน 2FA แล้ว กรุณาโหลดหน้าใหม่";
   if (error instanceof Error && (error.message === "INVALID_PROFILE_REFERENCE" || error.message === "INVALID_PRIMARY_UNIT")) return "ข้อมูลโปรไฟล์หรือหน่วยงานไม่ถูกต้อง กรุณาโหลดหน้าใหม่";
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return "มีการเปลี่ยนแปลงบัญชีพร้อมกัน กรุณาลองใหม่";
   return "ดำเนินการไม่สำเร็จ กรุณาลองใหม่";
@@ -206,5 +208,31 @@ export async function unlockLoginAction(formData: FormData): Promise<UserActionR
     await unlockUserLogin(id, actor.id);
     revalidatePath("/admin/users");
     return { ok: true, message: "ปลดล็อกการเข้าสู่ระบบแล้ว" };
+  } catch (error) { return { ok: false, message: messageFor(error) }; }
+}
+
+export async function unlockOtpAction(formData: FormData): Promise<UserActionResult> {
+  try {
+    const actor = await requireAdmin();
+    const id = String(formData.get("id") ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, message: "รหัสบัญชีผู้ใช้ไม่ถูกต้อง" };
+    await unlockUserOtp(id, actor.id);
+    revalidatePath("/admin/users");
+    return { ok: true, message: "ปลดการจำกัด OTP แล้ว ผู้ใช้ต้องเริ่มเข้าสู่ระบบใหม่" };
+  } catch (error) { return { ok: false, message: messageFor(error) }; }
+}
+
+export async function resetTotpAction(formData: FormData): Promise<UserActionResult> {
+  try {
+    const actor = await requireAdmin();
+    const id = String(formData.get("id") ?? "");
+    const adminPassword = String(formData.get("adminPassword") ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, message: "รหัสบัญชีผู้ใช้ไม่ถูกต้อง" };
+    if (!adminPassword) return { ok: false, message: "กรุณากรอกรหัสผ่านผู้ดูแลระบบ" };
+    await resetUserTotp(id, actor.id, adminPassword);
+    revalidatePath("/admin/users");
+    revalidatePath("/profile/security");
+    revalidatePath("/profile/security/otp");
+    return { ok: true, message: "รีเซ็ต 2FA และนำบัญชีออกจากระบบทุกอุปกรณ์แล้ว" };
   } catch (error) { return { ok: false, message: messageFor(error) }; }
 }

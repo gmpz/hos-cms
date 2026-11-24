@@ -24,11 +24,12 @@ test('login windows, concurrency and audited administrator unlock', { skip: proc
   assert.ok(['localhost','127.0.0.1'].includes(new URL(process.env.DATABASE_URL).hostname), 'Local database only');
   const prisma = new PrismaClient();
   const password = loadTs('../../src/server/auth/password.ts');
+  const otpLimit = loadTs('../../src/server/auth/otp-limit.ts');
   const policy = await import('../../src/features/auth/password-policy.mjs');
   const { authenticate, unlockUserLogin } = loadTs('../../src/server/auth/users.ts', {
     'server-only': {}, '@/server/database/prisma': { prisma },
     '@/server/media/storage': { mediaPublicUrl: (name) => `/uploads/${name}` },
-    './password': password, '@/features/auth/password-policy.mjs': policy,
+    './password': password, './otp-limit': otpLimit, '@/features/auth/password-policy.mjs': policy,
   });
   const id = randomUUID();
   const username = `lock-test-${id}`;

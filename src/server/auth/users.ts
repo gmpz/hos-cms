@@ -5,9 +5,10 @@ import { prisma } from "@/server/database/prisma";
 import { mediaPublicUrl } from "@/server/media/storage";
 import { hashPassword, verifyPassword } from "./password";
 import { isValidPassword } from "@/features/auth/password-policy.mjs";
+import { otpRetryAt } from "./otp-limit";
 
 export type ManagedUser = {
-  id: string; username: string; displayName: string; role: "ADMIN" | "MEMBER"; status: "ACTIVE" | "DISABLED"; lockedUntil: Date | null; lastLoginAt: Date | null; createdAt: Date;
+  id: string; username: string; displayName: string; role: "ADMIN" | "MEMBER"; status: "ACTIVE" | "DISABLED"; lockedUntil: Date | null; otpBlockedUntil: Date | null; totpEnabled: boolean; lastLoginAt: Date | null; createdAt: Date;
   personTypeId: string | null; positionId: string | null; levelId: string | null; profileMediaId: string | null;
   photoUrl: string | null; profilePhotoFocusX: number; profilePhotoFocusY: number; profilePhotoZoom: number;
   phone: string; phoneExtension: string; email: string; publishPhone: boolean; publishEmail: boolean;
@@ -22,7 +23,7 @@ export type UserProfileOptions = {
   media: { id: string; name: string }[];
 };
 
-export async function authenticate(username: string, password: string): Promise<{ id: string; mustChangePassword: boolean } | null> {
+export async function authenticate(username: string, password: string): Promise<{ id: string; passwordHash: string; totpEnabled: boolean } | null> {
   const normalized = username.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { username: normalized } });
   if (!user || user.status !== "ACTIVE" || (user.lockedUntil && user.lockedUntil > new Date())) return null;
@@ -31,7 +32,7 @@ export async function authenticate(username: string, password: string): Promise<
     // Serialize attempts for this account across all app processes. Password hashing
     // happens before taking the lock so it does not hold a database connection busy.
     await tx.$queryRaw`SELECT id FROM cms_users WHERE id = ${user.id} FOR UPDATE`;
-    const current = await tx.user.findUnique({ where: { id: user.id } });
+    const current = await tx.user.findUnique({ where: { id: user.id }, include: { totp: { select: { enabledAt: true } } } });
     const now = new Date();
     if (!current || current.status !== "ACTIVE" || current.passwordHash !== user.passwordHash ||
       (current.lockedUntil && current.lockedUntil > now)) return null;
@@ -48,9 +49,9 @@ export async function authenticate(username: string, password: string): Promise<
       return null;
     }
     await tx.user.update({ where: { id: current.id }, data: {
-      failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null, lastLoginAt: now,
+      failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null,
     } });
-    return { id: current.id, mustChangePassword: current.mustChangePassword };
+    return { id: current.id, passwordHash: current.passwordHash, totpEnabled: Boolean(current.totp?.enabledAt) };
   });
 }
 
@@ -73,13 +74,23 @@ export async function changeOwnPassword(userId: string, currentPassword: string,
 }
 
 export async function listUsers(): Promise<ManagedUser[]> {
-  const rows = await prisma.user.findMany({ select: {
+  const now = new Date();
+  const [rows, challenges] = await Promise.all([prisma.user.findMany({ select: {
     id: true, username: true, displayName: true, role: true, status: true, lockedUntil: true, lastLoginAt: true, createdAt: true,
     personTypeId: true, positionId: true, levelId: true, profileMediaId: true, profilePhotoFocusX: true, profilePhotoFocusY: true, profilePhotoZoom: true, profileMedia: { select: { fileName: true } }, phone: true, phoneExtension: true, email: true, publishPhone: true, publishEmail: true,
     memberships: { select: { unitId: true, isPrimary: true } },
-  }, orderBy: { createdAt: "desc" } });
-  return rows.map(({ memberships, profileMedia, ...user }) => ({
+    totp: { select: { enabledAt: true } },
+  }, orderBy: { createdAt: "desc" } }), prisma.loginChallenge.findMany({ where: { createdAt: { gt: new Date(now.getTime() - 15 * 60000) }, attempts: { gt: 0 } }, select: { userId: true, attempts: true, createdAt: true } })]);
+  const attemptsByUser = new Map<string, { attempts: number; createdAt: Date }[]>();
+  for (const challenge of challenges) {
+    const attempts = attemptsByUser.get(challenge.userId) ?? [];
+    attempts.push(challenge);
+    attemptsByUser.set(challenge.userId, attempts);
+  }
+  return rows.map(({ memberships, profileMedia, totp, ...user }) => ({
     ...user,
+    totpEnabled: Boolean(totp?.enabledAt),
+    otpBlockedUntil: otpRetryAt(attemptsByUser.get(user.id) ?? [], now),
     photoUrl: profileMedia ? mediaPublicUrl(profileMedia.fileName) : null,
     unitIds: memberships.map((membership) => membership.unitId),
     primaryUnitId: memberships.find((membership) => membership.isPrimary)?.unitId ?? null,
@@ -271,5 +282,38 @@ export async function unlockUserLogin(id: string, actorId: string) {
       failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null,
     } });
     await audit(tx, actorId, "user.login.unlock", id, `ปลดล็อกการเข้าสู่ระบบบัญชี ${target.username}`);
+  });
+}
+
+export async function unlockUserOtp(id: string, actorId: string) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM cms_users WHERE id = ${id} FOR UPDATE`;
+    const target = await tx.user.findUnique({ where: { id }, select: { username: true } });
+    if (!target) throw new Error("USER_NOT_FOUND");
+    await tx.loginChallenge.deleteMany({ where: { userId: id } });
+    await audit(tx, actorId, "user.otp.unlock", id, `ปลดการจำกัด OTP บัญชี ${target.username}`);
+  });
+}
+
+export async function resetUserTotp(id: string, actorId: string, adminPassword: string) {
+  const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { username: true, role: true, status: true } });
+  if (!actor || actor.role !== "ADMIN" || actor.status !== "ACTIVE") throw new Error("UNAUTHORIZED");
+  // Share the account-level login counter and lockout with this sensitive re-authentication.
+  const verified = await authenticate(actor.username, adminPassword);
+  if (!verified || verified.id !== actorId) throw new Error("INVALID_ADMIN_PASSWORD");
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM cms_users WHERE id = ${actorId} FOR UPDATE`;
+    const currentActor = await tx.user.findUnique({ where: { id: actorId }, select: { passwordHash: true, role: true, status: true, lockedUntil: true } });
+    if (!currentActor || currentActor.passwordHash !== verified.passwordHash || currentActor.role !== "ADMIN" || currentActor.status !== "ACTIVE") throw new Error("UNAUTHORIZED");
+    if (currentActor.lockedUntil && currentActor.lockedUntil > new Date()) throw new Error("INVALID_ADMIN_PASSWORD");
+    if (id !== actorId) await tx.$queryRaw`SELECT id FROM cms_users WHERE id = ${id} FOR UPDATE`;
+    const target = await tx.user.findUnique({ where: { id }, select: { username: true, totp: { select: { enabledAt: true } } } });
+    if (!target) throw new Error("USER_NOT_FOUND");
+    if (!target.totp?.enabledAt) throw new Error("TOTP_NOT_ENABLED");
+    await tx.userTotp.delete({ where: { userId: id } });
+    await tx.userRecoveryCode.deleteMany({ where: { userId: id } });
+    await tx.loginChallenge.deleteMany({ where: { userId: id } });
+    await tx.session.deleteMany({ where: { userId: id } });
+    await audit(tx, actorId, "user.totp.admin.reset", id, `รีเซ็ต 2FA บัญชี ${target.username} และเพิกถอน session`);
   });
 }

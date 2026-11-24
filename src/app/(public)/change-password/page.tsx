@@ -25,6 +25,7 @@ export default async function ChangePasswordPage({ searchParams }: { searchParam
 
   return <BrandedAuthShell
     className="change-password-card"
+    hideBrand
     eyebrow={`ตั้งค่าบัญชี · ${user.displayName}`}
     title={user.mustChangePassword ? "ตั้งรหัสผ่านใหม่" : "เปลี่ยนรหัสผ่าน"}
     description={user.mustChangePassword ? "กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนเข้าใช้งาน" : "ตั้งรหัสผ่านใหม่เพื่อความปลอดภัยของบัญชี"}

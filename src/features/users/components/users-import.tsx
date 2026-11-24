@@ -82,7 +82,8 @@ export function UsersImport() {
               const name = preview.rows.find((item) => item.row === row)?.displayName;
               return <div className="users-import-error-group" key={row}>
                 <button type="button" className="users-import-error-heading" aria-expanded={open} onClick={() => setExpandedRows((current) => { const next = new Set(current); if (next.has(row)) next.delete(row); else next.add(row); return next; })}>
-                  <span><strong>แถว {row}</strong>{name ? <span className="users-import-error-name">{name}</span> : null}</span>
+                  <strong className="users-import-error-row">แถว {row}</strong>
+                  {name ? <span className="users-import-error-name">{name}</span> : null}
                   <span className="users-import-error-count">{messages.length} ข้อผิดพลาด <ChevronDown size={16} className={open ? "is-open" : ""}/></span>
                 </button>
                 {open ? <ul>{messages.map((message, index) => <li key={index}>{message}</li>)}</ul> : null}

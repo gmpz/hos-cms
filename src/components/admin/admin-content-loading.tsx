@@ -18,7 +18,7 @@ const tablePatterns: Record<AdminTableKind, SkeletonCell[]> = {
   units: ["number", "primary", "text", "badge", "date", "actions"],
   announcements: ["primary", "text", "number", "date", "badge", "actions"],
   splash: ["primary", "text", "date", "badge", "actions"],
-  users: ["primary", "title", "badge", "badge", "date", "actions"],
+  users: ["primary", "title", "badge", "badge", "badge", "date", "actions"],
   activity: ["primary", "text", "text", "date", "actions"],
   media: ["primary", "text", "text", "date", "text", "actions"],
 };

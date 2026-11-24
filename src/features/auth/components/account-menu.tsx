@@ -1,8 +1,7 @@
 "use client";
 
-import { ChevronDown, KeyRound, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, LayoutDashboard, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { personnelPhotoPositionStyle } from "@/features/units/components/personnel-photo-position";
@@ -11,16 +10,15 @@ import { logoutAction, publicLogoutAction } from "../actions";
 type AccountMenuProps = {
   displayName: string;
   variant: "admin" | "public";
+  role: "ADMIN" | "MEMBER";
   photoUrl?: string | null;
   photoFocusX?: number;
   photoFocusY?: number;
   photoZoom?: number;
 };
 
-export function AccountMenu({ displayName, variant, photoUrl, photoFocusX = 50, photoFocusY = 25, photoZoom = 100 }: AccountMenuProps) {
-  const pathname = usePathname();
+export function AccountMenu({ displayName, variant, role, photoUrl, photoFocusX = 50, photoFocusY = 25, photoZoom = 100 }: AccountMenuProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  const passwordHref = `/change-password?returnTo=${encodeURIComponent(pathname)}`;
 
   useEffect(() => {
     function closeOnOutsideClick(event: PointerEvent) {
@@ -56,7 +54,8 @@ export function AccountMenu({ displayName, variant, photoUrl, photoFocusX = 50, 
     </summary>
     <div className="account-menu-dropdown">
       <Link href="/profile" onClick={() => detailsRef.current?.removeAttribute("open")}><UserRound size={16}/>โปรไฟล์ของฉัน</Link>
-      <Link href={passwordHref} onClick={() => detailsRef.current?.removeAttribute("open")}><KeyRound size={16}/>เปลี่ยนรหัสผ่าน</Link>
+      <Link href="/profile/security" onClick={() => detailsRef.current?.removeAttribute("open")}><ShieldCheck size={16}/>ความปลอดภัย</Link>
+      {role === "ADMIN" && <Link href="/admin" onClick={() => detailsRef.current?.removeAttribute("open")}><LayoutDashboard size={16}/>จัดการแอดมิน</Link>}
       <form action={variant === "admin" ? logoutAction : publicLogoutAction}>
         <button type="submit"><LogOut size={16}/>ออกจากระบบ</button>
       </form>

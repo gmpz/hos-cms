@@ -18,7 +18,7 @@ export default function CookiePolicyPage() {
         <div className="public-policy-table-wrap">
           <table>
             <thead><tr><th>ชื่อ</th><th>วัตถุประสงค์</th><th>ระยะเวลา</th></tr></thead>
-            <tbody><tr><td><code>hos_cms_session</code></td><td>จดจำเซสชันเพื่อยืนยันตัวตนและตรวจสอบสิทธิ์การเข้าถึงหน้าที่ต้องเข้าสู่ระบบ</td><td>ไม่เกิน 7 วัน หรือลบเมื่อออกจากระบบ</td></tr></tbody>
+            <tbody><tr><td><code>hos_cms_session</code></td><td>จดจำเซสชันเพื่อยืนยันตัวตนและตรวจสอบสิทธิ์การเข้าถึงหน้าที่ต้องเข้าสู่ระบบ</td><td>ไม่เกิน 7 วัน หรือลบเมื่อออกจากระบบ</td></tr><tr><td><code>hos_cms_otp_challenge</code></td><td>จดจำขั้นตอนยืนยัน OTP ระหว่างเข้าสู่ระบบ</td><td>ไม่เกิน 5 นาที</td></tr><tr><td><code>hos_cms_recovery_codes</code></td><td>แสดงรหัสกู้บัญชีหลังเปิด OTP เพื่อให้บันทึกไว้</td><td>ไม่เกิน 5 นาที หรือจนกดยืนยันว่าบันทึกแล้ว</td></tr></tbody>
           </table>
         </div>
         <p>คุกกี้นี้ถูกตั้งค่าเป็น <code>HttpOnly</code> และ <code>SameSite=Lax</code> เพื่อช่วยลดความเสี่ยงด้านความปลอดภัย หากปิดกั้นคุกกี้นี้ การเข้าสู่ระบบอาจใช้งานไม่ได้</p>

@@ -2,9 +2,9 @@
 import "./users-import.css";
 import { AdminTablePagination } from "@/components/admin/admin-table-pagination";
 
-import { KeyRound, Lock, LogOut, MoreHorizontal, Pencil, Plus, Search, ShieldCheck, Trash2, Unlock, Upload, UserRound, X } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Lock, LogOut, MoreHorizontal, Pencil, Plus, Search, ShieldCheck, ShieldOff, Trash2, Unlock, Upload, UserRound, X } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { listenForDropdownDismissal } from "@/components/ui/dropdown-scroll";
 import { useRouter } from "next/navigation";
@@ -14,23 +14,49 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PasswordPolicyField } from "@/features/auth/components/password-policy-field";
 import { isValidPassword } from "@/features/auth/password-policy.mjs";
 import { personnelPhotoPositionStyle } from "@/features/units/components/personnel-photo-position";
-import { createUserAction, unlockLoginAction, deleteUserAction, resetPasswordAction, revokeSessionsAction, setUserStatusAction, updateUserAction, type UserActionResult } from "../actions";
+import { createUserAction, unlockLoginAction, unlockOtpAction, deleteUserAction, resetPasswordAction, resetTotpAction, revokeSessionsAction, setUserStatusAction, updateUserAction, type UserActionResult } from "../actions";
 
 type ManagedUserView = {
-  id: string; username: string; displayName: string; role: "ADMIN" | "MEMBER"; status: "ACTIVE" | "DISABLED"; lockedUntil: Date | null; lastLoginAt: Date | null; createdAt: Date;
+  id: string; username: string; displayName: string; role: "ADMIN" | "MEMBER"; status: "ACTIVE" | "DISABLED"; lockedUntil: Date | null; otpBlockedUntil: Date | null; totpEnabled: boolean; lastLoginAt: Date | null; createdAt: Date;
   personTypeId: string | null; positionId: string | null; levelId: string | null; profileMediaId: string | null; phone: string; email: string;
   photoUrl: string | null; profilePhotoFocusX: number; profilePhotoFocusY: number; profilePhotoZoom: number;
   publishPhone: boolean; publishEmail: boolean; unitIds: string[]; primaryUnitId: string | null;
 };
 type Option = { id: string; name: string };
 type ProfileOptions = { personTypes: Option[]; positions: Option[]; levels: Option[]; units: Option[]; media: Option[] };
-type Dialog = { kind: "create" } | { kind: "edit" | "password"; user: ManagedUserView } | null;
+type Dialog = { kind: "create" } | { kind: "edit" | "password" | "resetTotp"; user: ManagedUserView } | null;
 type Action = (formData: FormData) => Promise<UserActionResult>;
 type AccountField = "username" | "displayName" | "password";
+type UserFilter = "ALL" | "ACTIVE" | "DISABLED" | "LOCKED" | "OTP_BLOCKED" | "TOTP_ENABLED" | "TOTP_DISABLED";
+
+function accountStatus(user: ManagedUserView, now: number): "ACTIVE" | "DISABLED" | "LOCKED" | "OTP_BLOCKED" {
+  if (user.status === "DISABLED") return "DISABLED";
+  if (user.lockedUntil && new Date(user.lockedUntil).getTime() > now) return "LOCKED";
+  if (user.otpBlockedUntil && new Date(user.otpBlockedUntil).getTime() > now) return "OTP_BLOCKED";
+  return "ACTIVE";
+}
+
+function matchesUserFilter(user: ManagedUserView, filter: UserFilter, now: number) {
+  if (filter === "ALL") return true;
+  if (filter === "TOTP_ENABLED") return user.totpEnabled;
+  if (filter === "TOTP_DISABLED") return !user.totpEnabled;
+  return accountStatus(user, now) === filter;
+}
+
+function UserStatusBadge({ label, kind, hint }: { label: string; kind: "active" | "disabled" | "otp-blocked"; hint?: string }) {
+  const id = useId();
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  function show(event: React.SyntheticEvent<HTMLSpanElement>) {
+    if (!hint) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPosition({ top: rect.bottom + 8, left: Math.max(145, Math.min(window.innerWidth - 145, rect.left + rect.width / 2)) });
+  }
+  return <><span className={`users-status ${kind}`} aria-label={hint ? `${label}: ${hint}` : undefined} aria-describedby={position ? id : undefined} tabIndex={hint ? 0 : undefined} onMouseEnter={show} onMouseLeave={() => setPosition(null)} onFocus={show} onBlur={() => setPosition(null)}>{label}</span>{position && hint ? createPortal(<span id={id} role="tooltip" className="users-status-tooltip" style={position}>{hint}</span>, document.body) : null}</>;
+}
 
 
 
-function UserMoreActions({ user, isCurrent, pending, isLocked, onUnlock, onPassword, onRevoke, onDelete }:  { user: ManagedUserView; isCurrent: boolean; pending: boolean; isLocked: boolean; onUnlock: () => void; onPassword: () => void; onRevoke: () => void; onDelete: () => void }) {
+function UserMoreActions({ user, isCurrent, pending, isLocked, isOtpBlocked, onUnlock, onUnlockOtp, onPassword, onResetTotp, onRevoke, onDelete }:  { user: ManagedUserView; isCurrent: boolean; pending: boolean; isLocked: boolean; isOtpBlocked: boolean; onUnlock: () => void; onUnlockOtp: () => void; onPassword: () => void; onResetTotp: () => void; onRevoke: () => void; onDelete: () => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -66,7 +92,7 @@ function UserMoreActions({ user, isCurrent, pending, isLocked, onUnlock, onPassw
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const width = 205;
-    const height = (isCurrent ? 92 : 132) + (isLocked ? 40 : 0);
+    const height = (isCurrent ? 92 : 132) + (isLocked ? 40 : 0) + (isOtpBlocked ? 40 : 0) + (user.totpEnabled ? 40 : 0);
     setPosition({
       left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
       top: rect.bottom + height + 8 > window.innerHeight ? Math.max(8, rect.top - height - 6) : rect.bottom + 6,
@@ -77,7 +103,9 @@ function UserMoreActions({ user, isCurrent, pending, isLocked, onUnlock, onPassw
     <button ref={triggerRef} type="button" title="ตัวเลือกเพิ่มเติม" aria-label={`ตัวเลือกเพิ่มเติมสำหรับ ${user.displayName}`} aria-haspopup="menu" aria-expanded={Boolean(position)} disabled={pending} onClick={toggle}><MoreHorizontal size={18}/></button>
     {position ? createPortal(<div ref={menuRef} className="users-actions-menu" role="menu" style={position}>
       {isLocked ? <button type="button" role="menuitem" onClick={() => { setPosition(null); onUnlock(); }}><Unlock size={16}/>ปลดล็อกการเข้าสู่ระบบ</button> : null}
+      {isOtpBlocked ? <button type="button" role="menuitem" onClick={() => { setPosition(null); onUnlockOtp(); }}><Unlock size={16}/>ปลดการจำกัด OTP</button> : null}
       <button type="button" role="menuitem" onClick={() => { setPosition(null); onPassword(); }}><KeyRound size={16}/>ตั้งรหัสผ่าน</button>
+      {user.totpEnabled ? <button type="button" role="menuitem" onClick={() => { setPosition(null); onResetTotp(); }}><ShieldOff size={16}/>รีเซ็ต 2FA</button> : null}
       <button type="button" role="menuitem" onClick={() => { setPosition(null); onRevoke(); }}><LogOut size={16}/>ออกจากระบบทุกอุปกรณ์</button>
       {!isCurrent ? <button type="button" role="menuitem" className="danger" onClick={() => { setPosition(null); onDelete(); }}><Trash2 size={16}/>ลบบัญชี</button> : null}
     </div>, document.body) : null}
@@ -96,18 +124,20 @@ export function UsersManager({ users, currentUserId, profileOptions, serverNow }
   }, [serverNow, router]);
   const [dialog, setDialogState] = useState<Dialog>(null);
   const [accountErrors, setAccountErrors] = useState<Partial<Record<AccountField, string>>>({});
+  const [resetTotpError, setResetTotpError] = useState("");
   function setDialog(next: Dialog) {
     setAccountErrors({});
+    setResetTotpError("");
     setDialogState(next);
   }
   const [toast, setToast] = useState<UserActionResult | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"ALL" | "ACTIVE" | "DISABLED">("ALL");
+  const [status, setStatus] = useState<UserFilter>("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [pending, startTransition] = useTransition();
   const [confirmation, setConfirmation] = useState<{ action: Action; formData: FormData; message: string; after?: () => void; title?: string; confirmLabel?: string; variant?: "danger" | "default" } | null>(null);
-  const filtered = useMemo(() => users.filter((user) => (status === "ALL" || user.status === status) && `${user.displayName} ${user.username} ${user.email}`.toLocaleLowerCase("th").includes(search.trim().toLocaleLowerCase("th"))), [users, search, status]);
+  const filtered = useMemo(() => users.filter((user) => matchesUserFilter(user, status, now) && `${user.displayName} ${user.username} ${user.email}`.toLocaleLowerCase("th").includes(search.trim().toLocaleLowerCase("th"))), [users, search, status, now]);
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pages);
   const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -133,6 +163,16 @@ export function UsersManager({ users, currentUserId, profileOptions, serverNow }
   function execute(action: Action, formData: FormData, after?: () => void) {
     setToast(null);
     startTransition(async () => { const result = await action(formData); if (!result.ok && action === resetPasswordAction && result.message === "รหัสผ่านไม่ครบตามเงื่อนไขที่กำหนด") { showAccountErrors({ password: result.message }); return; } setToast(result); if (result.ok) { after?.(); setDialog(null); router.refresh(); } });
+  }
+  function submitTotpReset(formData: FormData) {
+    setResetTotpError("");
+    startTransition(async () => {
+      const result = await resetTotpAction(formData);
+      if (!result.ok) { setResetTotpError(result.message); return; }
+      setDialog(null);
+      if (String(formData.get("id")) === currentUserId) router.replace("/login");
+      else { setToast(result); router.refresh(); }
+    });
   }
   function createNewUser(formData: FormData) {
     const username = String(formData.get("username") ?? "").trim();
@@ -162,8 +202,8 @@ export function UsersManager({ users, currentUserId, profileOptions, serverNow }
     <header><div><h1>บัญชีผู้ใช้งาน</h1><p>จัดการบัญชี โปรไฟล์ บทบาท และหน่วยงานของบุคลากร</p></div><div className="users-header-actions"><Link href="/admin/users/import" className="users-import-link"><Upload size={17}/>นำเข้าจาก Excel</Link><button type="button" className="primary-button users-add-button" onClick={() => { setAccountErrors({}); setDialog({ kind: "create" }); }}><Plus size={17}/>เพิ่มผู้ใช้งาน</button></div></header>
     {toast ? <ActionToast ok={toast.ok} title={toast.ok ? "ดำเนินการสำเร็จ" : "ดำเนินการไม่สำเร็จ"} description={toast.message} onClose={() => setToast(null)}/> : null}
     <section className="users-table-card admin-data-table">
-      <div className="users-table-toolbar"><div className="users-search"><Search size={17}/><input type="search" placeholder="ค้นหาชื่อ ชื่อผู้ใช้ หรืออีเมล" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></div><NativeSelect value={status} onChange={(event) => { setStatus(event.target.value as typeof status); setPage(1); }}><option value="ALL">ทุกสถานะ</option><option value="ACTIVE">ใช้งาน</option><option value="DISABLED">ปิดใช้งาน</option></NativeSelect></div>
-      <div className="users-table-scroll admin-data-table-scroll"><table className="users-table"><thead><tr><th>ผู้ใช้งาน</th><th>ข้อมูลบุคลากร</th><th>บทบาท</th><th>สถานะ</th><th>เข้าสู่ระบบล่าสุด</th><th className="admin-table-actions-heading">จัดการ</th></tr></thead><tbody>{visible.map((user) => { const isCurrent = user.id === currentUserId; const isLocked = Boolean(user.lockedUntil && new Date(user.lockedUntil).getTime() > now); return <tr key={user.id}><td><div className="users-table-person admin-table-primary"><span className={user.photoUrl ? "has-photo" : ""} style={user.photoUrl ? { backgroundImage: `url(${user.photoUrl})`, ...personnelPhotoPositionStyle({ x: user.profilePhotoFocusX, y: user.profilePhotoFocusY }, user.profilePhotoZoom) } : undefined}>{user.photoUrl ? null : <UserRound size={18}/>}</span><div><strong>{user.displayName}{isCurrent ? <em>คุณ</em> : null}</strong><small>@{user.username}</small></div></div></td><td><strong>{optionName(profileOptions.positions, user.positionId)}</strong><small>{optionName(profileOptions.personTypes, user.personTypeId)} · {optionName(profileOptions.levels, user.levelId)}</small></td><td><span className="users-role"><ShieldCheck size={14}/>{user.role === "ADMIN" ? "ผู้ดูแลระบบ" : "บุคลากร"}</span></td><td><div className="users-account-status"><span className={`users-status ${user.status === "DISABLED" || isLocked ? "disabled" : "active"}`}>{user.status === "DISABLED" ? "ปิดใช้งาน" : isLocked ? "ล็อกชั่วคราว" : "ใช้งาน"}</span>{isLocked && user.status === "ACTIVE" ? <small>ถึง {new Intl.DateTimeFormat("th-TH", { timeStyle: "short", timeZone: "Asia/Bangkok" }).format(new Date(user.lockedUntil!))} น.</small> : null}</div></td><td>{user.lastLoginAt ? new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(user.lastLoginAt)) : "ยังไม่เคย"}</td><td><div className="users-row-actions admin-table-actions"><Link href={`/admin/users/${user.id}/edit`} title="แก้ไข" aria-label={`แก้ไข ${user.displayName}`}><Pencil size={16}/></Link><button type="button" disabled={isCurrent || pending} className={user.status === "ACTIVE" ? "danger" : "success"} title={user.status === "ACTIVE" ? "ปิดใช้งานบัญชี" : "เปิดใช้งานบัญชี"} aria-label={`${user.status === "ACTIVE" ? "ปิด" : "เปิด"}ใช้งาน ${user.displayName}`} onClick={() => { const data = new FormData(); data.set("id", user.id); data.set("status", user.status === "ACTIVE" ? "DISABLED" : "ACTIVE"); run(setUserStatusAction, data, `${user.status === "ACTIVE" ? "ปิด" : "เปิด"}บัญชี ${user.displayName} หรือไม่?`); }}>{user.status === "ACTIVE" ? <Lock size={16}/> : <Unlock size={16}/>}</button><UserMoreActions user={user} isCurrent={isCurrent} pending={pending} isLocked={isLocked} onUnlock={() => { const data = new FormData(); data.set("id", user.id); setConfirmation({ action: unlockLoginAction, formData: data, title: "ปลดล็อกการเข้าสู่ระบบ?", message: `ปลดล็อกบัญชี “${user.displayName}” (@${user.username}) เพื่อให้ลองเข้าสู่ระบบได้ทันทีหรือไม่? การปลดล็อกนี้ไม่เปลี่ยนรหัสผ่านหรือสถานะปิดใช้งานบัญชี`, confirmLabel: "ปลดล็อก" }); }} onPassword={() => setDialog({ kind: "password", user })} onRevoke={() => { const data = new FormData(); data.set("id", user.id); run(revokeSessionsAction, data, `บังคับให้ ${user.displayName} ออกจากระบบทุกอุปกรณ์หรือไม่?`, isCurrent ? () => router.replace("/login") : undefined); }} onDelete={() => { const data = new FormData(); data.set("id", user.id); setConfirmation({ action: deleteUserAction, formData: data, title: "ลบบัญชีบุคลากรถาวร?", message: `ลบบัญชี “${user.displayName}” (@${user.username}) ถาวรหรือไม่? บัญชีจะเข้าสู่ระบบไม่ได้อีก และการลบนี้กู้คืนไม่ได้`, confirmLabel: "ลบบัญชี", variant: "danger" }); }}/></div></td></tr>; })}</tbody></table>{!visible.length ? <div className="users-table-empty">ไม่พบบัญชีผู้ใช้งาน</div> : null}</div>
+      <div className="users-table-toolbar"><div className="users-search"><Search size={17}/><input type="search" placeholder="ค้นหาชื่อ ชื่อผู้ใช้ หรืออีเมล" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></div><NativeSelect value={status} onChange={(event) => { setStatus(event.target.value as UserFilter); setPage(1); }} aria-label="กรองผู้ใช้งานตามสถานะ"><option value="ALL">ทุกสถานะ</option><option value="ACTIVE">ใช้งาน</option><option value="DISABLED">ปิดใช้งาน</option><option value="LOCKED">ล็อกชั่วคราว</option><option value="OTP_BLOCKED">จำกัด OTP</option><option value="TOTP_ENABLED">เปิดใช้ 2FA</option><option value="TOTP_DISABLED">ยังไม่เปิด 2FA</option></NativeSelect></div>
+      <div className="users-table-scroll admin-data-table-scroll"><table className="users-table"><thead><tr><th>ผู้ใช้งาน</th><th>ข้อมูลบุคลากร</th><th>บทบาท</th><th>สถานะ</th><th title="การยืนยันตัวตนสองขั้นตอน">2FA</th><th>เข้าสู่ระบบล่าสุด</th><th className="admin-table-actions-heading">จัดการ</th></tr></thead><tbody>{visible.map((user) => { const isCurrent = user.id === currentUserId; const isLocked = Boolean(user.lockedUntil && new Date(user.lockedUntil).getTime() > now); const isOtpBlocked = Boolean(user.otpBlockedUntil && new Date(user.otpBlockedUntil).getTime() > now); const retryAt = isLocked ? user.lockedUntil : isOtpBlocked ? user.otpBlockedUntil : null; const statusHint = user.status === "ACTIVE" && retryAt ? `ลองได้อีกครั้ง ${new Intl.DateTimeFormat("th-TH", { timeStyle: "short", timeZone: "Asia/Bangkok" }).format(new Date(retryAt))} น.` : undefined; return <tr key={user.id}><td><div className="users-table-person admin-table-primary"><span className={user.photoUrl ? "has-photo" : ""} style={user.photoUrl ? { backgroundImage: `url(${user.photoUrl})`, ...personnelPhotoPositionStyle({ x: user.profilePhotoFocusX, y: user.profilePhotoFocusY }, user.profilePhotoZoom) } : undefined}>{user.photoUrl ? null : <UserRound size={18}/>}</span><div><strong title={user.displayName}>{user.displayName}</strong><div className="users-username-line" title={`@${user.username}`}><span>@{user.username}</span>{isCurrent ? <em>คุณ</em> : null}</div></div></div></td><td><strong>{optionName(profileOptions.positions, user.positionId)}</strong><small>{optionName(profileOptions.personTypes, user.personTypeId)} · {optionName(profileOptions.levels, user.levelId)}</small></td><td><span className="users-role"><ShieldCheck size={14}/>{user.role === "ADMIN" ? "ผู้ดูแลระบบ" : "บุคลากร"}</span></td><td><div className="users-account-status"><UserStatusBadge kind={user.status === "DISABLED" || isLocked ? "disabled" : isOtpBlocked ? "otp-blocked" : "active"} label={user.status === "DISABLED" ? "ปิดใช้งาน" : isLocked ? "ล็อกชั่วคราว" : isOtpBlocked ? "จำกัด OTP" : "ใช้งาน"} hint={statusHint} /></div></td><td><span className={`users-totp-status ${user.totpEnabled ? "is-enabled" : ""}`}>{user.totpEnabled ? "เปิดใช้งาน" : "ยังไม่เปิด"}</span></td><td>{user.lastLoginAt ? new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(user.lastLoginAt)) : "ยังไม่เคย"}</td><td><div className="users-row-actions admin-table-actions"><Link href={`/admin/users/${user.id}/edit`} title="แก้ไข" aria-label={`แก้ไข ${user.displayName}`}><Pencil size={16}/></Link><button type="button" disabled={isCurrent || pending} className={user.status === "ACTIVE" ? "danger" : "success"} title={user.status === "ACTIVE" ? "ปิดใช้งานบัญชี" : "เปิดใช้งานบัญชี"} aria-label={`${user.status === "ACTIVE" ? "ปิด" : "เปิด"}ใช้งาน ${user.displayName}`} onClick={() => { const data = new FormData(); data.set("id", user.id); data.set("status", user.status === "ACTIVE" ? "DISABLED" : "ACTIVE"); run(setUserStatusAction, data, `${user.status === "ACTIVE" ? "ปิด" : "เปิด"}บัญชี ${user.displayName} หรือไม่?`); }}>{user.status === "ACTIVE" ? <Lock size={16}/> : <Unlock size={16}/>}</button><UserMoreActions user={user} isCurrent={isCurrent} pending={pending} isLocked={isLocked} isOtpBlocked={isOtpBlocked} onUnlock={() => { const data = new FormData(); data.set("id", user.id); setConfirmation({ action: unlockLoginAction, formData: data, title: "ปลดล็อกการเข้าสู่ระบบ?", message: `ปลดล็อกบัญชี “${user.displayName}” (@${user.username}) เพื่อให้ลองเข้าสู่ระบบได้ทันทีหรือไม่? การปลดล็อกนี้ไม่เปลี่ยนรหัสผ่านหรือสถานะปิดใช้งานบัญชี`, confirmLabel: "ปลดล็อก" }); }} onUnlockOtp={() => { const data = new FormData(); data.set("id", user.id); setConfirmation({ action: unlockOtpAction, formData: data, title: "ปลดการจำกัด OTP?", message: `ให้บัญชี “${user.displayName}” (@${user.username}) ลอง OTP ได้อีกครั้งหรือไม่? ผู้ใช้ต้องเริ่มเข้าสู่ระบบใหม่ และยังต้องกรอกรหัส OTP ที่ถูกต้อง`, confirmLabel: "ปลดการจำกัด" }); }} onPassword={() => setDialog({ kind: "password", user })} onResetTotp={() => setDialog({ kind: "resetTotp", user })} onRevoke={() => { const data = new FormData(); data.set("id", user.id); run(revokeSessionsAction, data, `บังคับให้ ${user.displayName} ออกจากระบบทุกอุปกรณ์หรือไม่?`, isCurrent ? () => router.replace("/login") : undefined); }} onDelete={() => { const data = new FormData(); data.set("id", user.id); setConfirmation({ action: deleteUserAction, formData: data, title: "ลบบัญชีบุคลากรถาวร?", message: `ลบบัญชี “${user.displayName}” (@${user.username}) ถาวรหรือไม่? บัญชีจะเข้าสู่ระบบไม่ได้อีก และการลบนี้กู้คืนไม่ได้`, confirmLabel: "ลบบัญชี", variant: "danger" }); }}/></div></td></tr>; })}</tbody></table>{!visible.length ? <div className="users-table-empty">ไม่พบบัญชีผู้ใช้งาน</div> : null}</div>
       {filtered.length ? <AdminTablePagination page={currentPage} pageCount={pages} pageSize={pageSize} total={filtered.length} label="เปลี่ยนหน้าบัญชีผู้ใช้งาน" onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}/> : null}
     </section>
     {dialog?.kind === "create" ? <UserDialog title="เพิ่มผู้ใช้งาน" description="" className="user-account-dialog" onClose={() => setDialog(null)}><form noValidate onSubmit={(event) => { event.preventDefault(); createNewUser(new FormData(event.currentTarget)); }}><div className="user-dialog-scroll"><div className="user-account-fields"><label><span>ชื่อผู้ใช้</span><input name="username" pattern="[A-Za-z0-9._-]{3,80}" minLength={3} maxLength={80} autoComplete="off" placeholder="เช่น somchai.k" required aria-invalid={Boolean(accountErrors.username)} aria-describedby={accountErrors.username ? "user-account-username-error" : undefined} onChange={() => clearAccountError("username")}/>{accountErrors.username ? <small id="user-account-username-error" className="user-account-field-error" role="alert">{accountErrors.username}</small> : null}<small>ใช้ตัวอักษรอังกฤษ ตัวเลข จุด ขีดกลาง หรือขีดล่าง</small></label><label><span>ชื่อ-นามสกุล</span><input name="displayName" minLength={2} maxLength={160} autoComplete="name" placeholder="ชื่อที่ใช้แสดงในระบบ" required aria-invalid={Boolean(accountErrors.displayName)} aria-describedby={accountErrors.displayName ? "user-account-display-name-error" : undefined} onChange={() => clearAccountError("displayName")}/>{accountErrors.displayName ? <small id="user-account-display-name-error" className="user-account-field-error" role="alert">{accountErrors.displayName}</small> : null}</label><PasswordPolicyField name="password" label="รหัสผ่านเริ่มต้น" error={accountErrors.password} onChange={() => clearAccountError("password")}/><label><span>บทบาท</span><NativeSelect name="role" defaultValue="MEMBER"><option value="MEMBER">บุคลากร</option><option value="ADMIN">ผู้ดูแลระบบ</option></NativeSelect></label></div></div><DialogFooter pending={pending} submitLabel="สร้างและกรอกข้อมูลต่อ" onClose={() => setDialog(null)}/></form></UserDialog> : null}
@@ -172,11 +212,17 @@ export function UsersManager({ users, currentUserId, profileOptions, serverNow }
       <section className="user-dialog-section"><h3>หน่วยงานที่สังกัด</h3><fieldset className="user-unit-fields">{profileOptions.units.length ? profileOptions.units.map((unit) => <label key={unit.id}><input type="checkbox" name="unitIds" value={unit.id} defaultChecked={dialog.user.unitIds.includes(unit.id)}/>{unit.name}</label>) : <small>ยังไม่มีหน่วยงานให้เลือก</small>}</fieldset><ProfileSelect name="primaryUnitId" label="หน่วยงานหลัก" value={dialog.user.primaryUnitId} options={profileOptions.units}/></section>
       <section className="user-dialog-section"><h3>ข้อมูลติดต่อและสิทธิ์</h3><div className="user-profile-grid"><label><span>โทรศัพท์</span><input name="phone" defaultValue={dialog.user.phone} maxLength={40}/><small><input type="checkbox" name="publishPhone" defaultChecked={dialog.user.publishPhone}/> แสดงต่อสาธารณะ</small></label><label><span>อีเมล</span><input name="email" type="email" defaultValue={dialog.user.email} maxLength={254}/><small><input type="checkbox" name="publishEmail" defaultChecked={dialog.user.publishEmail}/> แสดงต่อสาธารณะ</small></label><label><span>บทบาท</span>{dialog.user.id === currentUserId ? <><input type="hidden" name="role" value={dialog.user.role}/><NativeSelect value={dialog.user.role} disabled><option value="ADMIN">ผู้ดูแลระบบ</option></NativeSelect></> : <NativeSelect name="role" defaultValue={dialog.user.role}><option value="MEMBER">บุคลากร</option><option value="ADMIN">ผู้ดูแลระบบ</option></NativeSelect>}</label></div></section></div><DialogFooter pending={pending} submitLabel="บันทึกข้อมูล" onClose={() => setDialog(null)}/></form></UserDialog> : null}
     {dialog?.kind === "password" ? <UserDialog title="ตั้งรหัสผ่านใหม่" description={dialog.user.displayName} className="user-account-dialog" onClose={() => setDialog(null)}><form noValidate onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); if (!isValidPassword(String(data.get("password") ?? ""))) { showAccountErrors({ password: "รหัสผ่านยังไม่ครบตามเงื่อนไข" }); return; } setAccountErrors({}); run(resetPasswordAction, data, "รีเซ็ตรหัสผ่านและให้บัญชีนี้ออกจากระบบทุกอุปกรณ์หรือไม่?", dialog.user.id === currentUserId ? () => router.replace("/login") : undefined); }}><div className="user-dialog-scroll"><input type="hidden" name="id" value={dialog.user.id}/><div className="user-account-fields"><PasswordField error={accountErrors.password} onChange={() => clearAccountError("password")}/></div></div><DialogFooter pending={pending} submitLabel="รีเซ็ตรหัสผ่าน" onClose={() => setDialog(null)}/></form></UserDialog> : null}
+    {dialog?.kind === "resetTotp" ? <UserDialog title="รีเซ็ต 2FA" description={`${dialog.user.displayName} (@${dialog.user.username})`} className="user-account-dialog" onClose={() => setDialog(null)}><form onSubmit={(event) => { event.preventDefault(); submitTotpReset(new FormData(event.currentTarget)); }}><div className="user-dialog-scroll"><input type="hidden" name="id" value={dialog.user.id}/><div className="user-account-fields"><p className="users-totp-reset-note">ตรวจสอบตัวบุคคลก่อนรีเซ็ต คีย์ OTP และรหัสกู้บัญชีเดิมจะใช้ไม่ได้ บัญชีนี้จะออกจากระบบทุกอุปกรณ์ และเข้าสู่ระบบด้วยรหัสผ่านได้จนกว่าจะเปิด 2FA ใหม่</p><AdminResetPasswordField error={resetTotpError} onChange={() => setResetTotpError("")} /></div></div><DialogFooter pending={pending} submitLabel="ยืนยันรีเซ็ต 2FA" onClose={() => setDialog(null)}/></form></UserDialog> : null}
     {confirmation ? <ConfirmDialog title={confirmation.title ?? "ยืนยันการดำเนินการ"} description={confirmation.message} confirmLabel={confirmation.confirmLabel ?? "ยืนยัน"} variant={confirmation.variant ?? "default"} onClose={() => setConfirmation(null)} onConfirm={() => { const current = confirmation; setConfirmation(null); execute(current.action, current.formData, current.after); }}/> : null}
   </main>;
 }
 
 function ProfileSelect({ name, label, value, options }: { name: string; label: string; value: string | null; options: Option[] }) { return <label><span>{label}</span><NativeSelect name={name} defaultValue={value ?? ""}><option value="">ไม่ระบุ</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</NativeSelect></label>; }
 function PasswordField({ error, onChange }: { error?: string; onChange: () => void }) { return <><PasswordPolicyField name="password" label="รหัสผ่านใหม่" autoFocus error={error} onChange={onChange}/><p className="user-password-reset-hint">ผู้ใช้จะต้องเปลี่ยนรหัสผ่านอีกครั้งเมื่อเข้าสู่ระบบ</p></>; }
+
+function AdminResetPasswordField({ error, onChange }: { error: string; onChange: () => void }) {
+  const [visible, setVisible] = useState(false);
+  return <label><span>รหัสผ่านผู้ดูแลระบบของคุณ</span><div className="password-policy-input"><input name="adminPassword" type={visible ? "text" : "password"} autoComplete="current-password" required autoFocus onChange={onChange} /><button type="button" aria-label={visible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>{visible ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>{error ? <small className="user-account-field-error" role="alert">{error}</small> : null}</label>;
+}
 function DialogFooter({ pending, submitLabel, onClose }: { pending: boolean; submitLabel: string; onClose: () => void }) { return <footer><button type="button" onClick={onClose}>ยกเลิก</button><button type="submit" className="primary-button" disabled={pending}>{pending ? "กำลังบันทึก…" : submitLabel}</button></footer>; }
 function UserDialog({ title, description, onClose, children, className }: { title: string; description: string; onClose: () => void; children: React.ReactNode; className?: string }) { return <div className="modal-layer"><button type="button" className="modal-backdrop" aria-label="ปิด" onClick={onClose}/><div className={["user-dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-label={title}><header><div><h2>{title}</h2><p>{description}</p></div><button type="button" aria-label="ปิด" onClick={onClose}><X size={19}/></button></header>{children}</div></div>; }

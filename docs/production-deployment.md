@@ -3,6 +3,7 @@
 The supported hospital deployment is one Ubuntu server running Nginx, PM2, Next.js,
 and MySQL. Uploaded bytes are persistent state and must never be stored inside a
 release directory.
+Use Node.js 20.9 or newer for Next.js 16.4.6.
 
 ## Filesystem layout
 
@@ -45,9 +46,15 @@ The production `/var/www/hos-cms/shared/.env` must include at least:
 NODE_ENV="production"
 DATABASE_URL="mysql://hos_cms:strong-password@127.0.0.1:3306/hos_cms"
 SESSION_COOKIE_SECURE="true"
-SITE_URL="https://cms.pathumpho.go.th"
+TOTP_ENCRYPTION_KEY="<output of openssl rand -hex 32>"
+SITE_URL="https://hospital.example.go.th"
 MEDIA_STORAGE_DIRECTORY="/var/lib/hos-cms/uploads"
 ```
+
+Generate `TOTP_ENCRYPTION_KEY` with `openssl rand -hex 32`, then replace the
+example value above. Keep this key unchanged across releases: changing it makes
+existing authenticator registrations and setup proofs unreadable. Set `SITE_URL`
+to the same public HTTPS origin configured in Nginx.
 
 Install the Nginx template from `deploy/nginx/hos-cms.conf`, replace
 `hospital.example.go.th` and the hospital TLS certificate paths, test it
@@ -76,11 +83,13 @@ sudo -u hoscms ln -s /var/www/hos-cms/shared/.env "$release_dir/.env"
 
 cd "$release_dir"
 sudo -u hoscms npm ci
-sudo -u hoscms npm run build
 sudo -u hoscms npx prisma migrate status
 ```
 
-Before applying migrations, take coordinated backups of MySQL and uploaded files:
+The build reads database-backed site settings while generating pages, so the
+database must be reachable and the release migrations must be applied before
+`npm run build`. Before applying migrations, take coordinated backups of MySQL
+and uploaded files:
 
 ```bash
 backup_id=$(date +%Y%m%d-%H%M%S)
@@ -89,12 +98,15 @@ mysqldump --single-transaction --routines --triggers hos_cms > "/var/backups/hos
 sudo tar -C /var/lib/hos-cms -czf "/var/backups/hos-cms/$backup_id/uploads.tar.gz" uploads
 ```
 
-Apply committed migrations, remove development packages, switch the symlink
-atomically, and reload the configured PM2 process:
+Apply committed migrations, build the release, remove development packages,
+switch the symlink atomically, and reload the configured PM2 process. The build
+also downloads Google Fonts; allow access to `fonts.googleapis.com` and
+`fonts.gstatic.com` from the build host.
 
 ```bash
 cd "$release_dir"
 sudo -u hoscms npm run db:deploy
+sudo -u hoscms npm run build
 sudo -u hoscms npm prune --omit=dev
 sudo -u hoscms ln -sfn "$release_dir" /var/www/hos-cms/current
 

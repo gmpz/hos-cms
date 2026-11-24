@@ -8,5 +8,10 @@ function createClient() {
   return new PrismaClient({ datasourceUrl: url });
 }
 
-export const prisma = globalForPrisma.hosCmsPrisma ?? createClient();
+// Prisma's generated model delegates can change while next dev is running.
+// Replace the cached client after a schema regeneration instead of retaining
+// an instance created from the previous generated schema.
+export const prisma = globalForPrisma.hosCmsPrisma?.userTotp
+  ? globalForPrisma.hosCmsPrisma
+  : createClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.hosCmsPrisma = prisma;

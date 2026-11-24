@@ -16,6 +16,7 @@ import {
   siteSettingsChangedEvent,
 } from "@/features/site-settings/demo/storage";
 import type { SiteSettings } from "@/features/site-settings/types";
+import { foregroundFor } from "@/features/site-settings/theme-contrast";
 import { PublicNavigation } from "@/features/navigation/components/public-navigation";
 import { AccountMenu } from "@/features/auth/components/account-menu";
 import { isGoogleMapsUrl } from "@/features/site-settings/map-url";
@@ -116,6 +117,7 @@ export function PublicShellClient({ children, initialSettings, initialNavigation
     "--ink": settings.theme.text,
     "--background": settings.theme.background,
     "--foreground": settings.theme.text,
+    "--on-primary": foregroundFor(settings.theme.primary),
   } as CSSProperties;
   const logoStyle = logo ? { ...mediaPreviewStyle(logo), ...logoPositionStyle(settings) } : undefined;
   const hasFooterMap = isGoogleMapsUrl(settings.mapUrl);
@@ -169,7 +171,7 @@ export function PublicShellClient({ children, initialSettings, initialNavigation
           </div>
           <div className="public-topbar-actions">
             <Link className="public-topbar-search" href="/search" aria-label="ค้นหาทั้งเว็บไซต์" title="ค้นหาทั้งเว็บไซต์" aria-current={pathname === "/search" ? "page" : undefined}><Search size={20} aria-hidden="true"/></Link>
-            {signedInUser ? <div className="public-topbar-account"><AccountMenu displayName={signedInUser.displayName} variant="public" photoUrl={signedInUser.photoUrl} photoFocusX={signedInUser.profilePhotoFocusX} photoFocusY={signedInUser.profilePhotoFocusY} photoZoom={signedInUser.profilePhotoZoom}/></div> : <Link className="public-login-button" href={`/login?returnTo=${encodeURIComponent(pathname)}`}><LogIn size={16}/>เข้าสู่ระบบ</Link>}
+            {signedInUser ? <div className="public-topbar-account"><AccountMenu displayName={signedInUser.displayName} variant="public" role={signedInUser.role} photoUrl={signedInUser.photoUrl} photoFocusX={signedInUser.profilePhotoFocusX} photoFocusY={signedInUser.profilePhotoFocusY} photoZoom={signedInUser.profilePhotoZoom}/></div> : <Link className="public-login-button" href={`/login?returnTo=${encodeURIComponent(pathname)}`}><LogIn size={16}/>เข้าสู่ระบบ</Link>}
           </div>
         </header>
         <main>{children}</main>

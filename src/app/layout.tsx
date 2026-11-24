@@ -29,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="th"
       className={`${prompt.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col"><CategoryBootstrap /><UnitBootstrap /><GlobalToastHost />{children}</body>
     </html>

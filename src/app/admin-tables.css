@@ -281,6 +281,11 @@
   background-position: right 7px center;
   color: var(--foreground);
 }
+@supports (-webkit-touch-callout: none) {
+  .admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown {
+    text-indent: 18px;
+  }
+}
 .admin-shell .admin-page-size-select select.cms-native-select.admin-page-size-dropdown > .native-select-display {
   justify-content: center;
   transform: translateX(-9px);
