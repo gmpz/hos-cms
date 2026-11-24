@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AccountMenu } from "@/features/auth/components/account-menu";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 const labels: Record<string, string> = {
   admin: "CMS",
@@ -48,7 +48,7 @@ export function AdminTopbar({ collapsed, onMenu, onToggle, displayName, photoUrl
     <header className="admin-topbar">
       <div className="admin-topbar-left">
         <button className="mobile-menu" aria-label="เปิดเมนู" onClick={onMenu}>
-          ☰
+          <Menu size={22} aria-hidden="true"/>
         </button>
         <button
           className="collapse-menu"
@@ -59,7 +59,7 @@ export function AdminTopbar({ collapsed, onMenu, onToggle, displayName, photoUrl
         >
           {collapsed ? <PanelLeftOpen size={19} strokeWidth={1.8}/> : <PanelLeftClose size={19} strokeWidth={1.8}/>}
         </button>
-        <nav aria-label="Breadcrumb">
+        <nav className="public-breadcrumb" aria-label="Breadcrumb">
           {crumbs.map((crumb, i) => (
             <span key={crumb.href}>
               {i > 0 && <i>›</i>}

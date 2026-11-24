@@ -6554,6 +6554,28 @@ select:not([multiple]),
 .public-shell .public-topbar-search:hover,.public-shell .public-topbar-search[aria-current=page]{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,white)}
 @media(max-width:760px){.public-shell .public-topbar-search{width:44px;height:44px}}
 
+/* Match the public topbar's breadcrumb and menu scale across screen sizes. */
+.admin-topbar-left{min-width:0;flex:1}
+.admin-topbar .public-breadcrumb{min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;font-size:14px;font-weight:400}
+.admin-topbar .public-breadcrumb>span{flex:0 0 auto;min-width:0;align-items:center}
+.admin-topbar .public-breadcrumb>span:last-child{flex:0 1 auto;max-width:min(34vw,440px);overflow:hidden;color:var(--ink)}
+.admin-topbar .public-breadcrumb>span:last-child>b{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.admin-topbar .mobile-menu{align-items:center;justify-content:center;width:44px;height:44px;flex:0 0 44px;padding:0;color:var(--muted-foreground)}
+@media(max-width:1024px){
+  .admin-topbar{height:60px;flex-basis:60px;padding-inline:12px}
+  .admin-topbar-left{gap:6px}
+  .admin-topbar .public-breadcrumb>span:first-child:not(:last-child){display:none}
+  .admin-topbar .public-breadcrumb>span:nth-child(2)>i{display:none}
+}
+@media(max-width:760px){
+  .admin-topbar .mobile-menu{display:flex}
+  .admin-topbar .public-breadcrumb>span:not(:last-child){display:flex}
+}
+@media(max-width:480px){
+  .admin-topbar{padding-inline:8px}
+  .admin-topbar .public-breadcrumb{display:none}
+}
+
 /* Position the content inside a full-width block surface, not the surface itself. */
 .content-block.content-placement {
   width:100%;
