@@ -6401,13 +6401,6 @@ select:not([multiple]),
 .block-skeleton-lines>span:nth-child(2n){width:82%}
 .block-skeleton-lines>span:nth-child(3n){width:62%}
 .public-loading-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
-.public-auth-loading{display:grid;justify-items:start;gap:15px}
-.public-auth-loading-mark{width:54px;height:54px;border-radius:15px}
-.public-auth-loading-eyebrow{width:120px;height:10px}
-.public-auth-loading-title{width:210px;height:31px}
-.public-auth-loading-copy{width:min(330px,80vw);height:12px}
-.public-auth-loading-field{width:100%;height:45px}
-.public-auth-loading-button{width:100%;height:45px;margin-top:5px}
 @keyframes public-loading-shimmer{0%{background-position:120% 0}100%{background-position:-120% 0}}
 @media(prefers-reduced-motion:reduce){.public-loading-shape{animation:none}}
 /* Public shell: overlay navigation on narrow screens keeps content at full width. */

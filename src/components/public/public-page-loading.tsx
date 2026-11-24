@@ -43,16 +43,10 @@ export function PublicInitialLoading({ theme, overlay = false }: { theme?: Theme
 export function PublicAuthLoading({ label }: { label: string }) {
   return (
     <main className="login-screen" role="status" aria-busy="true" aria-live="polite" aria-label={label}>
-      <section className="login-card public-auth-loading" aria-hidden="true">
-        <span className="public-loading-shape public-auth-loading-mark" />
-        <span className="public-loading-shape public-auth-loading-eyebrow" />
-        <span className="public-loading-shape public-auth-loading-title" />
-        <span className="public-loading-shape public-auth-loading-copy" />
-        <span className="public-loading-shape public-auth-loading-field" />
-        <span className="public-loading-shape public-auth-loading-field" />
-        <span className="public-loading-shape public-auth-loading-button" />
-      </section>
-      <span className="public-loading-sr-only">{label}</span>
+      <div className="public-route-loading-indicator">
+        <span className="public-route-loading-spinner" aria-hidden="true" />
+        <span>{label}</span>
+      </div>
     </main>
   );
 }

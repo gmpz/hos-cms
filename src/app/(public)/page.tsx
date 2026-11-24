@@ -1,5 +1,5 @@
 import { PublicHome } from "@/features/pages/components/public-home";
-import { PublicPageLoading } from "@/components/public/public-page-loading";
+import { PublicInitialLoading } from "@/components/public/public-page-loading";
 import { getPublishedCmsPage } from "@/server/pages/repository";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -37,7 +37,7 @@ async function HomeContent() {
 }
 
 export default function Home() {
-  return <Suspense fallback={<PublicPageLoading label="กำลังโหลดหน้าแรก..."/>}>
+  return <Suspense fallback={<PublicInitialLoading overlay/>}>
     <HomeContent/>
   </Suspense>;
 }
