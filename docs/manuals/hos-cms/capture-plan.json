@@ -1,0 +1,289 @@
+{
+  "01": [
+    {
+      "name": "change-password",
+      "route": "/change-password"
+    },
+    {
+      "name": "admin-entry",
+      "route": "/admin",
+      "mark": ".admin-sidebar",
+      "number": 3
+    }
+  ],
+  "02": [
+    {
+      "name": "welcome",
+      "route": "/welcome"
+    },
+    {
+      "name": "home",
+      "route": "/",
+      "click": "button:has-text('เข้าสู่เว็บไซต์')",
+      "wait": 1500
+    },
+    {
+      "name": "news",
+      "route": "/news",
+      "mark": "input[placeholder]",
+      "number": 1
+    },
+    {
+      "name": "units",
+      "route": "/units",
+      "mark": "input[placeholder]",
+      "number": 1
+    },
+    {
+      "name": "documents",
+      "route": "/documents",
+      "mark": "input[placeholder]",
+      "number": 1
+    },
+    {
+      "name": "search",
+      "route": "/search",
+      "mark": "input[placeholder]",
+      "number": 1
+    },
+    {
+      "name": "about",
+      "route": "/about-us"
+    },
+    {
+      "name": "privacy",
+      "route": "/privacy-policy"
+    }
+  ],
+  "03": [
+    {
+      "name": "profile",
+      "route": "/profile"
+    },
+    {
+      "name": "security",
+      "route": "/profile/security"
+    },
+    {
+      "name": "otp-settings",
+      "route": "/profile/security/otp"
+    }
+  ],
+  "04": [
+    {
+      "name": "dashboard",
+      "route": "/admin"
+    },
+    {
+      "name": "visitors",
+      "route": "/admin/visitors"
+    }
+  ],
+  "05": [
+    {
+      "name": "media-library",
+      "route": "/admin/media",
+      "wait": 2000
+    },
+    {
+      "name": "media-list",
+      "route": "/admin/media",
+      "wait": 2000,
+      "click": "button[aria-label='มุมมองรายการ']"
+    }
+  ],
+  "06": [
+    {
+      "name": "pages-list",
+      "route": "/admin/pages"
+    },
+    {
+      "name": "new-page",
+      "route": "/admin/pages/new"
+    },
+    {
+      "name": "home-builder",
+      "route": "/admin/pages/home/builder",
+      "wait": 1500
+    },
+    {
+      "name": "builder-settings",
+      "route": "/admin/pages/home/builder",
+      "click": "button[aria-label='ตั้งค่าหน้า']",
+      "wait": 1500
+    },
+    {
+      "name": "block-picker",
+      "route": "/admin/pages/home/builder",
+      "click": "button[aria-label='เพิ่ม Block ด้านบนสุด']",
+      "wait": 1500
+    },
+    {
+      "name": "block-picker-more",
+      "route": "/admin/pages/home/builder",
+      "click": "button[aria-label='เพิ่ม Block ด้านบนสุด']",
+      "scroll": ".insert-block-grid",
+      "wait": 1500
+    },
+    {
+      "name": "builder-access",
+      "route": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder",
+      "click": "button:has-text('สิทธิ์:')",
+      "wait": 1500
+    }
+  ],
+  "07": [
+    {
+      "name": "navigation-list",
+      "route": "/admin/navigation"
+    },
+    {
+      "name": "navigation-add",
+      "route": "/admin/navigation",
+      "click": "button:has-text('เพิ่มเมนูหลัก')"
+    }
+  ],
+  "08": [
+    {
+      "name": "splash-list",
+      "route": "/admin/splash-screens"
+    },
+    {
+      "name": "splash-new",
+      "route": "/admin/splash-screens/new"
+    },
+    {
+      "name": "announcements-list",
+      "route": "/admin/announcements"
+    },
+    {
+      "name": "announcement-new",
+      "route": "/admin/announcements/new"
+    }
+  ],
+  "09": [
+    {
+      "name": "posts-list",
+      "route": "/admin/posts"
+    },
+    {
+      "name": "post-create-choice",
+      "route": "/admin/posts",
+      "click": "button:has-text('สร้างข่าว')"
+    },
+    {
+      "name": "post-new",
+      "route": "/admin/posts/new"
+    },
+    {
+      "name": "post-blocks",
+      "route": "/admin/posts/new?mode=blocks"
+    },
+    {
+      "name": "post-metadata",
+      "route": "/admin/posts/new",
+      "click": "button.news-meta-trigger"
+    }
+  ],
+  "10": [
+    {
+      "name": "post-categories",
+      "route": "/admin/categories?scope=posts"
+    },
+    {
+      "name": "category-add",
+      "route": "/admin/categories?scope=posts",
+      "click": "button:has-text('เพิ่มหมวดหมู่')"
+    },
+    {
+      "name": "document-categories",
+      "route": "/admin/categories?scope=documents"
+    }
+  ],
+  "11": [
+    {
+      "name": "units-list",
+      "route": "/admin/units"
+    },
+    {
+      "name": "unit-general",
+      "route": "/admin/units/new"
+    },
+    {
+      "name": "unit-content",
+      "route": "/admin/units/new",
+      "click": "button:has-text('เนื้อหาหน่วยงาน')"
+    },
+    {
+      "name": "unit-services",
+      "route": "/admin/units/new",
+      "click": "button:has-text('เมนูบริการแบบกลุ่ม')"
+    },
+    {
+      "name": "unit-personnel",
+      "route": "/admin/units/new",
+      "click": "button:has-text('บุคลากร')"
+    },
+    {
+      "name": "unit-layout",
+      "route": "/admin/units/new",
+      "click": "button:has-text('การจัดหน้า')"
+    }
+  ],
+  "12": [
+    {
+      "name": "documents-list",
+      "route": "/admin/documents"
+    },
+    {
+      "name": "documents-add",
+      "route": "/admin/documents",
+      "click": "button:has-text('เพิ่มเอกสาร')"
+    },
+    {
+      "name": "documents-trash",
+      "route": "/admin/documents",
+      "click": "button:has-text('ถังขยะ')"
+    }
+  ],
+  "13": [
+    {
+      "name": "users-list",
+      "route": "/admin/users"
+    },
+    {
+      "name": "users-add",
+      "route": "/admin/users",
+      "click": "button:has-text('เพิ่มผู้ใช้งาน')"
+    },
+    {
+      "name": "users-import",
+      "route": "/admin/users/import"
+    },
+    {
+      "name": "profile-masters",
+      "route": "/admin/profile-masters"
+    }
+  ],
+  "14": [
+    {
+      "name": "hospital-settings",
+      "route": "/admin/settings"
+    },
+    {
+      "name": "theme-settings",
+      "route": "/admin/settings/theme"
+    }
+  ],
+  "15": [
+    {
+      "name": "activity-list",
+      "route": "/admin/activity"
+    },
+    {
+      "name": "visitors-report",
+      "route": "/admin/visitors"
+    }
+  ],
+  "16": []
+}

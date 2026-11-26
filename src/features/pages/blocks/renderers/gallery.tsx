@@ -172,8 +172,9 @@ export function Gallery({ config }: { config: GalleryConfig }) {
       })}
       </div>
       {config.images.length > 1 ? <>
-        <button type="button" className="gallery-slider-arrow previous" onClick={() => moveSlider(-1)} aria-label="เลื่อนภาพไปทางซ้าย"><ChevronLeft size={24}/></button>
-        <button type="button" className="gallery-slider-arrow next" onClick={() => moveSlider(1)} aria-label="เลื่อนภาพไปทางขวา"><ChevronRight size={24}/></button>
+        <button type="button" className="gallery-slider-arrow previous" onClick={() => moveSlider(-1)} aria-label="เลื่อนภาพไปทางซ้าย"><ChevronLeft size={20}/></button>
+        <span className="gallery-slider-count">{config.images.length} รูป</span>
+        <button type="button" className="gallery-slider-arrow next" onClick={() => moveSlider(1)} aria-label="เลื่อนภาพไปทางขวา"><ChevronRight size={20}/></button>
       </> : null}
     </div> : <div className={`gallery-grid columns-${config.columns}`}>
       {config.images.length ? config.images.map((item, index) => {

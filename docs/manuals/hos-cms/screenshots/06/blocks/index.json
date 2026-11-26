@@ -1,0 +1,72 @@
+[
+  {
+    "label": "ตั้งค่า แบนเนอร์",
+    "file": "block-01.png",
+    "source": "/admin/pages/home/builder"
+  },
+  {
+    "label": "ตั้งค่า เมนูบริการแบบกลุ่ม",
+    "file": "block-02.png",
+    "source": "/admin/pages/home/builder"
+  },
+  {
+    "label": "ตั้งค่า ข่าวแบบแท็บ",
+    "file": "block-03.png",
+    "source": "/admin/pages/home/builder"
+  },
+  {
+    "label": "ตั้งค่า เอกสาร",
+    "file": "block-04.png",
+    "source": "/admin/pages/home/builder"
+  },
+  {
+    "label": "ตั้งค่า รูปภาพ",
+    "file": "block-05.png",
+    "source": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder"
+  },
+  {
+    "label": "ตั้งค่า สถิติสำคัญ",
+    "file": "block-06.png",
+    "source": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder"
+  },
+  {
+    "label": "ตั้งค่า การ์ดข้อความ",
+    "file": "block-07.png",
+    "source": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder"
+  },
+  {
+    "label": "ตั้งค่า Rich Text",
+    "file": "block-08.png",
+    "source": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder"
+  },
+  {
+    "label": "ตั้งค่า ไฟล์แนบ",
+    "file": "block-09.png",
+    "source": "/admin/pages/b87d052f-f2fb-47aa-9fd0-fb315ca0feca/builder"
+  },
+  {
+    "label": "ตั้งค่า ลิงก์",
+    "file": "block-10.png",
+    "source": "/admin/pages/29000417-8a33-4099-9869-b2fccaf07726/builder"
+  },
+  {
+    "label": "ตั้งค่า ประกาศ",
+    "file": "block-11.png",
+    "source": "/admin/pages/fc24e966-15a0-4bfd-9a27-7abedaf14054/builder"
+  },
+  {
+    "label": "ตั้งค่า Iframe",
+    "file": "block-12.png",
+    "source": "/admin/pages/fc24e966-15a0-4bfd-9a27-7abedaf14054/builder"
+  },
+  {
+    "label": "ตั้งค่า เส้นกั้น",
+    "file": "block-13.png",
+    "source": "/admin/pages/fc24e966-15a0-4bfd-9a27-7abedaf14054/builder"
+  },
+  {
+    "label": "ตั้งค่า ข่าวและผลงาน",
+    "file": "block-14.png",
+    "source": "/admin/pages/3fa77d5b-9c75-4f50-8cc2-ffb7722309d5/builder"
+  }
+]

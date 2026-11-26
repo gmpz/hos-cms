@@ -270,11 +270,12 @@ function UnitPublicSection({
             <h2>{unitSectionLabels[section]}</h2>
             <p>ติดตามข่าวสาร กิจกรรม และผลงานล่าสุดของกลุ่มงาน</p>
           </div>
-          <Link href={allNewsHref}>
+          <Link className="unit-view-all-top" href={allNewsHref}>
             ดูข่าวทั้งหมด →
           </Link>
         </div>
         {newsContent}
+        <div className="tabbed-news-view-all unit-view-all-bottom"><Link href={allNewsHref}>ดูข่าวทั้งหมด →</Link></div>
       </section>
     );
   }
@@ -384,7 +385,7 @@ function UnitDocumentsSection({
           <h2>{unitSectionLabels.documents}</h2>
           <p>ค้นหาและดาวน์โหลดเอกสารเผยแพร่ของกลุ่มงาน</p>
         </div>
-        <Link href={allDocumentsHref}>
+        <Link className="unit-view-all-top" href={allDocumentsHref}>
           ดูเอกสารทั้งหมด →
         </Link>
       </div>
@@ -434,6 +435,7 @@ function UnitDocumentsSection({
           <p>กลุ่มงานนี้ยังไม่มีเอกสารที่เผยแพร่</p>
         </div>
       )}
+      <div className="tabbed-news-view-all unit-view-all-bottom"><Link href={allDocumentsHref}>ดูเอกสารทั้งหมด →</Link></div>
     </section>
   );
 }

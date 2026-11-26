@@ -1,0 +1,660 @@
+{
+  "title": "คู่มือการใช้งาน HOS-CMS",
+  "scenes": [
+    {
+      "title": "บทที่ 1",
+      "steps": [
+        {
+          "go": "/change-password",
+          "text": "เปิดหน้า change password",
+          "screenshot": "01/change-password"
+        },
+        {
+          "go": "/admin",
+          "text": "เปิดหน้า admin entry",
+          "screenshot": "01/admin-entry",
+          "mark": ".admin-sidebar"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 2",
+      "steps": [
+        {
+          "go": "/welcome",
+          "text": "เปิดหน้า welcome",
+          "screenshot": "02/welcome"
+        },
+        {
+          "go": "/",
+          "text": "เปิดหน้าสำหรับ home"
+        },
+        {
+          "click": "button:has-text('เข้าสู่เว็บไซต์')",
+          "text": "เปิดส่วน home",
+          "screenshot": "02/home",
+          "wait": 1500
+        },
+        {
+          "go": "/news",
+          "text": "เปิดหน้า news",
+          "screenshot": "02/news",
+          "mark": "input[placeholder]"
+        },
+        {
+          "go": "/units",
+          "text": "เปิดหน้า units",
+          "screenshot": "02/units",
+          "mark": "input[placeholder]"
+        },
+        {
+          "go": "/documents",
+          "text": "เปิดหน้า documents",
+          "screenshot": "02/documents",
+          "mark": "input[placeholder]"
+        },
+        {
+          "go": "/search",
+          "text": "เปิดหน้า search",
+          "screenshot": "02/search",
+          "mark": "input[placeholder]"
+        },
+        {
+          "go": "/about-us",
+          "text": "เปิดหน้า about",
+          "screenshot": "02/about"
+        },
+        {
+          "go": "/privacy-policy",
+          "text": "เปิดหน้า privacy",
+          "screenshot": "02/privacy"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 3",
+      "steps": [
+        {
+          "go": "/profile",
+          "text": "เปิดหน้า profile",
+          "screenshot": "03/profile"
+        },
+        {
+          "go": "/profile/security",
+          "text": "เปิดหน้า security",
+          "screenshot": "03/security"
+        },
+        {
+          "go": "/profile/security/otp",
+          "text": "เปิดหน้า otp settings",
+          "screenshot": "03/otp-settings"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 4",
+      "steps": [
+        {
+          "go": "/admin",
+          "text": "เปิดหน้า dashboard",
+          "screenshot": "04/dashboard"
+        },
+        {
+          "go": "/admin/visitors",
+          "text": "เปิดหน้า visitors",
+          "screenshot": "04/visitors"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 5",
+      "steps": [
+        {
+          "go": "/admin/media",
+          "text": "เปิดหน้า media library",
+          "screenshot": "05/media-library",
+          "wait": 2000
+        },
+        {
+          "go": "/admin/media",
+          "text": "เปิดหน้าสำหรับ media list"
+        },
+        {
+          "click": "button[aria-label='มุมมองรายการ']",
+          "text": "เปิดส่วน media list",
+          "screenshot": "05/media-list",
+          "wait": 2000
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 6",
+      "steps": [
+        {
+          "go": "/admin/pages",
+          "text": "เปิดหน้า pages list",
+          "screenshot": "06/pages-list"
+        },
+        {
+          "go": "/admin/pages/new",
+          "text": "เปิดหน้า new page",
+          "screenshot": "06/new-page"
+        },
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิดหน้า home builder",
+          "screenshot": "06/home-builder",
+          "wait": 1500
+        },
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิดหน้าสำหรับ builder settings"
+        },
+        {
+          "click": "button[aria-label='ตั้งค่าหน้า']",
+          "text": "เปิดส่วน builder settings",
+          "screenshot": "06/builder-settings",
+          "wait": 1500
+        },
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิดหน้าสำหรับ block picker"
+        },
+        {
+          "click": "button[aria-label='เพิ่ม Block ด้านบนสุด']",
+          "text": "เปิดส่วน block picker",
+          "screenshot": "06/block-picker",
+          "wait": 1500
+        },
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิดหน้าสำหรับ block picker more"
+        },
+        {
+          "click": "button[aria-label='เพิ่ม Block ด้านบนสุด']",
+          "text": "เปิดส่วน block picker more",
+          "screenshot": "06/block-picker-more",
+          "wait": 1500
+        },
+        {
+          "go": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder",
+          "text": "เปิดหน้าสำหรับ builder access"
+        },
+        {
+          "click": "button:has-text('สิทธิ์:')",
+          "text": "เปิดส่วน builder access",
+          "screenshot": "06/builder-access",
+          "wait": 1500
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 7",
+      "steps": [
+        {
+          "go": "/admin/navigation",
+          "text": "เปิดหน้า navigation list",
+          "screenshot": "07/navigation-list"
+        },
+        {
+          "go": "/admin/navigation",
+          "text": "เปิดหน้าสำหรับ navigation add"
+        },
+        {
+          "click": "button:has-text('เพิ่มเมนูหลัก')",
+          "text": "เปิดส่วน navigation add",
+          "screenshot": "07/navigation-add"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 8",
+      "steps": [
+        {
+          "go": "/admin/splash-screens",
+          "text": "เปิดหน้า splash list",
+          "screenshot": "08/splash-list"
+        },
+        {
+          "go": "/admin/splash-screens/new",
+          "text": "เปิดหน้า splash new",
+          "screenshot": "08/splash-new"
+        },
+        {
+          "go": "/admin/announcements",
+          "text": "เปิดหน้า announcements list",
+          "screenshot": "08/announcements-list"
+        },
+        {
+          "go": "/admin/announcements/new",
+          "text": "เปิดหน้า announcement new",
+          "screenshot": "08/announcement-new"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 9",
+      "steps": [
+        {
+          "go": "/admin/posts",
+          "text": "เปิดหน้า posts list",
+          "screenshot": "09/posts-list"
+        },
+        {
+          "go": "/admin/posts",
+          "text": "เปิดหน้าสำหรับ post create choice"
+        },
+        {
+          "click": "button:has-text('สร้างข่าว')",
+          "text": "เปิดส่วน post create choice",
+          "screenshot": "09/post-create-choice"
+        },
+        {
+          "go": "/admin/posts/new",
+          "text": "เปิดหน้า post new",
+          "screenshot": "09/post-new"
+        },
+        {
+          "go": "/admin/posts/new?mode=blocks",
+          "text": "เปิดหน้า post blocks",
+          "screenshot": "09/post-blocks"
+        },
+        {
+          "go": "/admin/posts/new",
+          "text": "เปิดหน้าสำหรับ post metadata"
+        },
+        {
+          "click": "button.news-meta-trigger",
+          "text": "เปิดส่วน post metadata",
+          "screenshot": "09/post-metadata"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 10",
+      "steps": [
+        {
+          "go": "/admin/categories?scope=posts",
+          "text": "เปิดหน้า post categories",
+          "screenshot": "10/post-categories"
+        },
+        {
+          "go": "/admin/categories?scope=posts",
+          "text": "เปิดหน้าสำหรับ category add"
+        },
+        {
+          "click": "button:has-text('เพิ่มหมวดหมู่')",
+          "text": "เปิดส่วน category add",
+          "screenshot": "10/category-add"
+        },
+        {
+          "go": "/admin/categories?scope=documents",
+          "text": "เปิดหน้า document categories",
+          "screenshot": "10/document-categories"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 11",
+      "steps": [
+        {
+          "go": "/admin/units",
+          "text": "เปิดหน้า units list",
+          "screenshot": "11/units-list"
+        },
+        {
+          "go": "/admin/units/new",
+          "text": "เปิดหน้า unit general",
+          "screenshot": "11/unit-general"
+        },
+        {
+          "go": "/admin/units/new",
+          "text": "เปิดหน้าสำหรับ unit content"
+        },
+        {
+          "click": "button:has-text('เนื้อหาหน่วยงาน')",
+          "text": "เปิดส่วน unit content",
+          "screenshot": "11/unit-content"
+        },
+        {
+          "go": "/admin/units/new",
+          "text": "เปิดหน้าสำหรับ unit services"
+        },
+        {
+          "click": "button:has-text('เมนูบริการแบบกลุ่ม')",
+          "text": "เปิดส่วน unit services",
+          "screenshot": "11/unit-services"
+        },
+        {
+          "go": "/admin/units/new",
+          "text": "เปิดหน้าสำหรับ unit personnel"
+        },
+        {
+          "click": "button:has-text('บุคลากร')",
+          "text": "เปิดส่วน unit personnel",
+          "screenshot": "11/unit-personnel"
+        },
+        {
+          "go": "/admin/units/new",
+          "text": "เปิดหน้าสำหรับ unit layout"
+        },
+        {
+          "click": "button:has-text('การจัดหน้า')",
+          "text": "เปิดส่วน unit layout",
+          "screenshot": "11/unit-layout"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 12",
+      "steps": [
+        {
+          "go": "/admin/documents",
+          "text": "เปิดหน้า documents list",
+          "screenshot": "12/documents-list"
+        },
+        {
+          "go": "/admin/documents",
+          "text": "เปิดหน้าสำหรับ documents add"
+        },
+        {
+          "click": "button:has-text('เพิ่มเอกสาร')",
+          "text": "เปิดส่วน documents add",
+          "screenshot": "12/documents-add"
+        },
+        {
+          "go": "/admin/documents",
+          "text": "เปิดหน้าสำหรับ documents trash"
+        },
+        {
+          "click": "button:has-text('ถังขยะ')",
+          "text": "เปิดส่วน documents trash",
+          "screenshot": "12/documents-trash"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 13",
+      "steps": [
+        {
+          "go": "/admin/users",
+          "text": "เปิดหน้า users list",
+          "screenshot": "13/users-list"
+        },
+        {
+          "go": "/admin/users",
+          "text": "เปิดหน้าสำหรับ users add"
+        },
+        {
+          "click": "button:has-text('เพิ่มผู้ใช้งาน')",
+          "text": "เปิดส่วน users add",
+          "screenshot": "13/users-add"
+        },
+        {
+          "go": "/admin/users/import",
+          "text": "เปิดหน้า users import",
+          "screenshot": "13/users-import"
+        },
+        {
+          "go": "/admin/profile-masters",
+          "text": "เปิดหน้า profile masters",
+          "screenshot": "13/profile-masters"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 14",
+      "steps": [
+        {
+          "go": "/admin/settings",
+          "text": "เปิดหน้า hospital settings",
+          "screenshot": "14/hospital-settings"
+        },
+        {
+          "go": "/admin/settings/theme",
+          "text": "เปิดหน้า theme settings",
+          "screenshot": "14/theme-settings"
+        }
+      ]
+    },
+    {
+      "title": "บทที่ 15",
+      "steps": [
+        {
+          "go": "/admin/activity",
+          "text": "เปิดหน้า activity list",
+          "screenshot": "15/activity-list"
+        },
+        {
+          "go": "/admin/visitors",
+          "text": "เปิดหน้า visitors report",
+          "screenshot": "15/visitors-report"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า แบนเนอร์",
+      "steps": [
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า แบนเนอร์"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า แบนเนอร์\"]",
+          "text": "เปิด ตั้งค่า แบนเนอร์",
+          "screenshot": "06/blocks/block-01",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า เมนูบริการแบบกลุ่ม",
+      "steps": [
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า เมนูบริการแบบกลุ่ม"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า เมนูบริการแบบกลุ่ม\"]",
+          "text": "เปิด ตั้งค่า เมนูบริการแบบกลุ่ม",
+          "screenshot": "06/blocks/block-02",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า ข่าวแบบแท็บ",
+      "steps": [
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า ข่าวแบบแท็บ"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า ข่าวแบบแท็บ\"]",
+          "text": "เปิด ตั้งค่า ข่าวแบบแท็บ",
+          "screenshot": "06/blocks/block-03",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า เอกสาร",
+      "steps": [
+        {
+          "go": "/admin/pages/home/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า เอกสาร"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า เอกสาร\"]",
+          "text": "เปิด ตั้งค่า เอกสาร",
+          "screenshot": "06/blocks/block-04",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า รูปภาพ",
+      "steps": [
+        {
+          "go": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า รูปภาพ"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า รูปภาพ\"]",
+          "text": "เปิด ตั้งค่า รูปภาพ",
+          "screenshot": "06/blocks/block-05",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า สถิติสำคัญ",
+      "steps": [
+        {
+          "go": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า สถิติสำคัญ"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า สถิติสำคัญ\"]",
+          "text": "เปิด ตั้งค่า สถิติสำคัญ",
+          "screenshot": "06/blocks/block-06",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า การ์ดข้อความ",
+      "steps": [
+        {
+          "go": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า การ์ดข้อความ"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า การ์ดข้อความ\"]",
+          "text": "เปิด ตั้งค่า การ์ดข้อความ",
+          "screenshot": "06/blocks/block-07",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า Rich Text",
+      "steps": [
+        {
+          "go": "/admin/pages/1161d9b6-df50-4dde-8724-71744a628ff3/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า Rich Text"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า Rich Text\"]",
+          "text": "เปิด ตั้งค่า Rich Text",
+          "screenshot": "06/blocks/block-08",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า ไฟล์แนบ",
+      "steps": [
+        {
+          "go": "/admin/pages/b87d052f-f2fb-47aa-9fd0-fb315ca0feca/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า ไฟล์แนบ"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า ไฟล์แนบ\"]",
+          "text": "เปิด ตั้งค่า ไฟล์แนบ",
+          "screenshot": "06/blocks/block-09",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า ลิงก์",
+      "steps": [
+        {
+          "go": "/admin/pages/29000417-8a33-4099-9869-b2fccaf07726/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า ลิงก์"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า ลิงก์\"]",
+          "text": "เปิด ตั้งค่า ลิงก์",
+          "screenshot": "06/blocks/block-10",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า ประกาศ",
+      "steps": [
+        {
+          "go": "/admin/pages/fc24e966-15a0-4bfd-9a27-7abedaf14054/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า ประกาศ"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า ประกาศ\"]",
+          "text": "เปิด ตั้งค่า ประกาศ",
+          "screenshot": "06/blocks/block-11",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า Iframe",
+      "steps": [
+        {
+          "go": "/admin/pages/fc24e966-15a0-4bfd-9a27-7abedaf14054/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า Iframe"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า Iframe\"]",
+          "text": "เปิด ตั้งค่า Iframe",
+          "screenshot": "06/blocks/block-12",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า เส้นกั้น",
+      "steps": [
+        {
+          "go": "/admin/pages/fc24e966-15a0-4bfd-9a27-7abedaf14054/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า เส้นกั้น"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า เส้นกั้น\"]",
+          "text": "เปิด ตั้งค่า เส้นกั้น",
+          "screenshot": "06/blocks/block-13",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "แผง ตั้งค่า ข่าวและผลงาน",
+      "steps": [
+        {
+          "go": "/admin/pages/3fa77d5b-9c75-4f50-8cc2-ffb7722309d5/builder",
+          "text": "เปิด Page Builder เพื่อดู ตั้งค่า ข่าวและผลงาน"
+        },
+        {
+          "click": "button[aria-label=\"ตั้งค่า ข่าวและผลงาน\"]",
+          "text": "เปิด ตั้งค่า ข่าวและผลงาน",
+          "screenshot": "06/blocks/block-14",
+          "crop": ".block-settings"
+        }
+      ]
+    },
+    {
+      "title": "รายละเอียดบันทึกกิจกรรม",
+      "steps": [
+        {
+          "go": "/admin/activity?period=week",
+          "text": "เปิดบันทึกกิจกรรมในช่วง 7 วันล่าสุด"
+        },
+        {
+          "click": "a[aria-label^=\"ดูรายละเอียด\"]",
+          "text": "เปิดรายละเอียดของกิจกรรม",
+          "screenshot": "15/activity-detail"
+        }
+      ]
+    }
+  ]
+}
