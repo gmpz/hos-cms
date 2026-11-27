@@ -46,3 +46,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Local AI Agent Skills
+.agents/
+
+/docs
+/output

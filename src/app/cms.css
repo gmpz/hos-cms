@@ -8456,12 +8456,11 @@ select:not([multiple]),
   min-width:0;
   overflow:hidden;
   border:1px solid var(--border);
-  border-radius:15px;
+  border-radius:10px;
   background:#fff;
   transition:border-color .18s ease,background-color .18s ease;
 }
-.faq-list details:hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border))}
-.faq-list details[open]{border-color:color-mix(in srgb,var(--primary) 42%,var(--border));background:color-mix(in srgb,var(--primary) 2%,#fff)}
+.faq-list details:not([open]):hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border))}
 .faq-list summary{
   display:flex;
   align-items:flex-start;
@@ -8488,8 +8487,6 @@ select:not([multiple]),
 .faq-list details[open] .faq-toggle{transform:rotate(180deg);color:var(--primary)}
 .faq-answer{
   margin:0 18px 16px;
-  padding-top:12px;
-  border-top:1px solid color-mix(in srgb,var(--primary) 12%,var(--border));
   color:var(--muted-foreground);
   font-size:16px;
   line-height:1.7;
@@ -8500,10 +8497,10 @@ select:not([multiple]),
 .faq-list .faq-answer .rich-text-content p{padding:0}
 @media(max-width:520px){.faq-list{gap:8px}}
 @container (max-width:520px){
-  .faq-list details{border-radius:13px}
+  .faq-list details{border-radius:10px}
   .faq-list summary{min-height:48px;padding:12px;gap:12px;font-size:16px}
   .faq-toggle{width:20px;height:20px;margin-top:2px}
-  .faq-answer{margin:0 12px 13px;padding-top:10px;font-size:14px;line-height:1.65}
+  .faq-answer{margin:0 12px 13px;font-size:14px;line-height:1.65}
 }
 
 /* FAQ editor uses the same compact, expandable item layout as other block settings. */
