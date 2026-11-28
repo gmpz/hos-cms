@@ -5540,9 +5540,9 @@ a.public-document-row:hover { border-color:color-mix(in srgb,var(--primary) 35%,
 .media-usage-dialog h2{margin:0;font-size:20px;font-weight:600}.media-usage-dialog header p{margin:3px 0 0;color:var(--muted-foreground);font-size:12px}
 .media-usage-dialog>header>button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;background:transparent;color:var(--muted-foreground)}
 .media-usage-dialog>p{margin:0;padding:16px 22px 10px;color:#536d7b;font-size:13px}
-.media-usage-list{display:grid;gap:7px;max-height:360px;margin:0 22px;padding:0 2px 2px;overflow-y:auto}
-.media-usage-list>a{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:#fafcfc;color:var(--foreground);text-decoration:none}
-.media-usage-list>a:hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border));background:#f0f7f6}.media-usage-list>a>span{min-width:0}
+.media-usage-list{display:grid;grid-template-columns:minmax(0,1fr);gap:7px;max-height:360px;margin:0 22px;padding:0 2px 2px;overflow-x:hidden;overflow-y:auto}
+.media-usage-list>a{display:flex;align-items:center;justify-content:space-between;min-width:0;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:#fafcfc;color:var(--foreground);text-decoration:none}
+.media-usage-list>a:hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border));background:#f0f7f6}.media-usage-list>a>span{flex:1;min-width:0}
 .media-usage-list strong,.media-usage-list small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.media-usage-list strong{font-size:13px}.media-usage-list small{margin-top:2px;color:var(--muted-foreground);font-size:10px}.media-usage-list svg{flex:0 0 auto;color:var(--primary)}
 .media-usage-dialog>footer{display:flex;justify-content:flex-end;margin-top:18px;padding:14px 22px;border-top:1px solid var(--border);background:#fafcfc}.media-usage-dialog>footer button{min-width:110px}
 @media(max-width:600px){.media-usage-dialog>header{grid-template-columns:40px minmax(0,1fr) 32px;padding:17px}.media-usage-dialog>header>span{width:40px;height:40px}.media-usage-dialog>p{padding:14px 17px 9px}.media-usage-list{margin-inline:17px}.media-usage-dialog>footer{padding:13px 17px}}
