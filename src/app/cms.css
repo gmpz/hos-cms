@@ -4944,7 +4944,7 @@ a.public-document-row:hover { border-color:color-mix(in srgb,var(--primary) 35%,
 .admin-unit-search:not(:focus-within) .admin-unit-options{display:none}.admin-primary-unit{width:calc(50% - 8px)}.users-add-button{border-radius:10px!important}@media(max-width:600px){.admin-primary-unit{width:100%}}
 
 /* Match the category manager's table density and bounded pagination. */
-.users-table-page{width:100%;max-width:none;min-width:0;margin:0;container-type:inline-size}
+.users-table-page{width:100%;max-width:1380px;min-width:0;margin:0 auto;container-type:inline-size}
 .users-table-page .users-table-toolbar{justify-content:flex-start}
 .users-table-page .users-table-toolbar>select.cms-native-select{flex:0 0 auto;width:190px;min-width:190px}
 @media(max-width:700px){.users-table-page .users-table-toolbar>select.cms-native-select{width:100%;min-width:0}}
