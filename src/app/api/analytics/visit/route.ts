@@ -7,7 +7,9 @@ const botUserAgents = /bot|crawler|spider|headless|lighthouse|curl|wget|preview|
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
-  if (origin && origin !== request.nextUrl.origin) return new NextResponse(null, { status: 403 });
+  const host = request.headers.get("host") ?? request.nextUrl.host;
+  const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.slice(0, -1);
+  if (origin && origin !== `${protocol}://${host}`) return new NextResponse(null, { status: 403 });
   if (request.headers.get("sec-fetch-site") === "cross-site") return new NextResponse(null, { status: 403 });
 
   const userAgent = request.headers.get("user-agent") ?? "";
